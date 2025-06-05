@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 
 interface SubmissionFormProps {
-  onSubmit: (data: any) => void;
+  onSubmit: (data: any) => Promise<void>;
 }
 
 const SubmissionForm = ({ onSubmit }: SubmissionFormProps) => {
@@ -19,8 +19,7 @@ const SubmissionForm = ({ onSubmit }: SubmissionFormProps) => {
     title: "",
     description: "",
     code: "",
-    language: "python",
-    type: "classwork"
+    language: "python"
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
@@ -39,25 +38,34 @@ const SubmissionForm = ({ onSubmit }: SubmissionFormProps) => {
 
     setIsSubmitting(true);
     
-    // Simulate submission delay
-    setTimeout(() => {
-      onSubmit({
+    try {
+      await onSubmit({
         ...formData,
-        type: activeTab,
-        date: new Date().toLocaleDateString()
+        type: activeTab
       });
       
-      // Reset form
+      // Reset form only after successful submission
       setFormData({
         title: "",
         description: "",
         code: "",
-        language: "python",
-        type: activeTab
+        language: "python"
       });
       
+      toast({
+        title: "Submission Successful",
+        description: `Your ${activeTab} has been submitted successfully!`,
+      });
+    } catch (error) {
+      console.error('Submission error:', error);
+      toast({
+        title: "Submission Failed",
+        description: "Failed to submit your work. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
       setIsSubmitting(false);
-    }, 1000);
+    }
   };
 
   const updateFormData = (field: string, value: string) => {
@@ -241,7 +249,7 @@ const SubmissionForm = ({ onSubmit }: SubmissionFormProps) => {
                     "Submit Homework"
                   )}
                 </Button>
-              </form>
+                </form>
             </div>
           </TabsContent>
         </Tabs>

@@ -1,14 +1,15 @@
-
-import { 
-  collection, 
-  addDoc, 
-  query, 
-  where, 
-  orderBy, 
-  getDocs, 
-  Timestamp 
-} from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+// submissionService.ts
+import {
+  collection,
+  addDoc,
+  getDocs,
+  query,
+  where,
+  Timestamp,
+  doc,
+  setDoc,
+} from "firebase/firestore";
+import { db } from "@/lib/firebase"; // Update path based on your structure
 
 export interface Submission {
   id?: string;
@@ -16,97 +17,43 @@ export interface Submission {
   userEmail: string;
   userName: string;
   title: string;
-  description: string;
+  description?: string;
   code: string;
   language: string;
-  type: 'classwork' | 'homework';
-  submittedAt: Date;
+  type: "classwork" | "homework";
   status: string;
+  submittedAt?: Date;
 }
 
-export const submissionService = {
-  // Add a new submission
-  async addSubmission(submission: Omit<Submission, 'id' | 'submittedAt'>) {
-    try {
-      const docRef = await addDoc(collection(db, 'submissions'), {
-        ...submission,
-        submittedAt: Timestamp.now(),
-      });
-      return docRef.id;
-    } catch (error) {
-      console.error('Error adding submission:', error);
-      throw error;
-    }
+const submissionService = {
+  // Add a new submission for a user (under /users/{userId}/submissions/)
+  async addSubmission(submission: Submission) {
+    const userSubmissionsRef = collection(
+      db,
+      "users",
+      submission.userId,
+      "submissions"
+    );
+
+    const dataToSave = {
+      ...submission,
+      submittedAt: Timestamp.now(),
+    };
+
+    await addDoc(userSubmissionsRef, dataToSave);
   },
 
-  // Get submissions for a specific user
+  // Get all submissions for a specific user
   async getUserSubmissions(userId: string): Promise<Submission[]> {
-    try {
-      const q = query(
-        collection(db, 'submissions'),
-        where('userId', '==', userId),
-        orderBy('submittedAt', 'desc')
-      );
-      
-      const querySnapshot = await getDocs(q);
-      const submissions: Submission[] = [];
-      
-      querySnapshot.forEach((doc) => {
-        const data = doc.data();
-        submissions.push({
-          id: doc.id,
-          userId: data.userId,
-          userEmail: data.userEmail,
-          userName: data.userName,
-          title: data.title,
-          description: data.description,
-          code: data.code,
-          language: data.language,
-          type: data.type,
-          submittedAt: data.submittedAt.toDate(),
-          status: data.status,
-        });
-      });
-      
-      return submissions;
-    } catch (error) {
-      console.error('Error getting user submissions:', error);
-      throw error;
-    }
-  },
+    const userSubmissionsRef = collection(db, "users", userId, "submissions");
 
-  // Get all submissions (for admin)
-  async getAllSubmissions(): Promise<Submission[]> {
-    try {
-      const q = query(
-        collection(db, 'submissions'),
-        orderBy('submittedAt', 'desc')
-      );
-      
-      const querySnapshot = await getDocs(q);
-      const submissions: Submission[] = [];
-      
-      querySnapshot.forEach((doc) => {
-        const data = doc.data();
-        submissions.push({
-          id: doc.id,
-          userId: data.userId,
-          userEmail: data.userEmail,
-          userName: data.userName,
-          title: data.title,
-          description: data.description,
-          code: data.code,
-          language: data.language,
-          type: data.type,
-          submittedAt: data.submittedAt.toDate(),
-          status: data.status,
-        });
-      });
-      
-      return submissions;
-    } catch (error) {
-      console.error('Error getting all submissions:', error);
-      throw error;
-    }
-  }
+    const snapshot = await getDocs(userSubmissionsRef);
+    return snapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...(doc.data() as Submission),
+      submittedAt: doc.data().submittedAt?.toDate(),
+    }));
+  },
 };
+
+export { submissionService };

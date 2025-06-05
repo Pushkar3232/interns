@@ -3,16 +3,18 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useState } from "react";
+import { Submission } from "@/services/submissionService";
 
 interface SubmissionHistoryProps {
-  submissions: any[];
+  submissions: Submission[];
   loading: boolean;
+  onRefresh?: () => void;
 }
 
-const SubmissionHistory = ({ submissions, loading }: SubmissionHistoryProps) => {
-  const [expandedItems, setExpandedItems] = useState<Set<number>>(new Set());
+const SubmissionHistory = ({ submissions, loading, onRefresh }: SubmissionHistoryProps) => {
+  const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
 
-  const toggleExpanded = (id: number) => {
+  const toggleExpanded = (id: string) => {
     const newExpanded = new Set(expandedItems);
     if (newExpanded.has(id)) {
       newExpanded.delete(id);
@@ -22,8 +24,8 @@ const SubmissionHistory = ({ submissions, loading }: SubmissionHistoryProps) => 
     setExpandedItems(newExpanded);
   };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
+  const formatDate = (date: Date) => {
+    return date.toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
@@ -70,7 +72,12 @@ const SubmissionHistory = ({ submissions, loading }: SubmissionHistoryProps) => 
               <span className="text-4xl">📝</span>
             </div>
             <h3 className="text-xl font-semibold text-gray-900 mb-2">No submissions yet</h3>
-            <p className="text-gray-600">Your submitted work will appear here once you start submitting assignments.</p>
+            <p className="text-gray-600 mb-4">Your submitted work will appear here once you start submitting assignments.</p>
+            {onRefresh && (
+              <Button onClick={onRefresh} variant="outline">
+                Refresh
+              </Button>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -80,10 +87,19 @@ const SubmissionHistory = ({ submissions, loading }: SubmissionHistoryProps) => 
   return (
     <Card className="bg-white/60 backdrop-blur-sm border-0 shadow-xl">
       <CardHeader>
-        <CardTitle className="text-2xl font-bold text-gray-900">Submission History</CardTitle>
-        <CardDescription>
-          View all your submitted work ({submissions.length} submissions)
-        </CardDescription>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="text-2xl font-bold text-gray-900">Submission History</CardTitle>
+            <CardDescription>
+              View all your submitted work ({submissions.length} submissions)
+            </CardDescription>
+          </div>
+          {onRefresh && (
+            <Button onClick={onRefresh} variant="outline" size="sm">
+              Refresh
+            </Button>
+          )}
+        </div>
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
@@ -91,7 +107,7 @@ const SubmissionHistory = ({ submissions, loading }: SubmissionHistoryProps) => 
             <Card key={submission.id} className="border shadow-sm hover:shadow-md transition-all duration-200">
               <Collapsible>
                 <CollapsibleTrigger
-                  onClick={() => toggleExpanded(submission.id)}
+                  onClick={() => submission.id && toggleExpanded(submission.id)}
                   className="w-full"
                 >
                   <CardHeader className="pb-4">
@@ -118,7 +134,7 @@ const SubmissionHistory = ({ submissions, loading }: SubmissionHistoryProps) => 
                           className="p-1 h-8 w-8"
                         >
                           <span className={`transform transition-transform duration-200 ${
-                            expandedItems.has(submission.id) ? 'rotate-180' : ''
+                            submission.id && expandedItems.has(submission.id) ? 'rotate-180' : ''
                           }`}>
                             ▼
                           </span>
