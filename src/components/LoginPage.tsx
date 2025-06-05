@@ -18,8 +18,12 @@ const LoginPage = () => {
       <div className="w-full max-w-md space-y-6 md:space-y-8">
         {/* Logo and Header */}
         <div className="text-center">
-          <div className="mx-auto w-24 h-24 md:w-28 md:h-28 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-2xl flex items-center justify-center mb-4 shadow-lg transform transition-transform hover:scale-105">
-            <span className="text-3xl md:text-4xl font-bold text-white">V2V</span>
+          <div className="mx-auto w-24 h-24 md:w-28 md:h-28 bg-gradient-to-br rounded-full flex items-center justify-center mb-4 shadow-lg transform transition-transform hover:scale-105">
+            <img 
+              src="/v2v.png" 
+              alt="V2V Logo" 
+              className=""
+            />
           </div>
           <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-2">V2V Edtech LLP</h1>
           <p className="text-lg text-gray-700 md:text-xl">Data Analysis Internship Portal</p>

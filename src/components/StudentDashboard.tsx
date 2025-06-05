@@ -10,6 +10,7 @@ import SubmissionHistory from "./SubmissionHistory";
 import { useFirebaseAuth } from "@/hooks/useFirebaseAuth";
 import { submissionService, Submission } from "@/services/submissionService";
 import { useToast } from "@/hooks/use-toast";
+import Image from "next/image"; // Add this import for the logo
 
 interface StudentDashboardProps {
   user: User;
@@ -109,10 +110,15 @@ const StudentDashboard = ({ user }: StudentDashboardProps) => {
       <header className="bg-white/80 backdrop-blur-xl border-b border-white/20 shadow-lg sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-14 sm:h-16 lg:h-18">
-            {/* Logo Section */}
+            {/* Logo Section - Updated with actual logo */}
             <div className="flex items-center gap-2 sm:gap-4">
-              <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-br from-blue-600 via-indigo-600 to-purple-600 rounded-lg flex items-center justify-center shadow-lg">
-                <span className="text-sm sm:text-lg font-bold text-white">V2V</span>
+              {/* Logo Image */}
+              <div className="w-8 h-8 sm:w-10 sm:h-10 flex items-center justify-center">
+                <img 
+                  src="/v2v.png" 
+                  alt="V2V Logo" 
+                  className="w-8 h-8 sm:w-10 sm:h-10 object-contain"
+                />
               </div>
               <div className="hidden sm:block">
                 <h1 className="text-lg sm:text-xl font-bold text-gray-900">V2V Edtech LLP</h1>
@@ -223,14 +229,14 @@ const StudentDashboard = ({ user }: StudentDashboardProps) => {
           </Card>
         </div>
 
-        {/* Stats Cards */}
+        {/* Stats Cards - Simplified for mobile */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 mb-6 sm:mb-8">
           <Card className="bg-white/70 backdrop-blur-xl border-0 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105">
-            <CardContent className="p-4 sm:p-6">
+            <CardContent className="p-3 sm:p-6">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-xs sm:text-sm font-medium text-gray-600">Total Submissions</p>
-                  <p className="text-2xl sm:text-3xl font-bold text-gray-900 mt-1">{submissions.length}</p>
+                  <p className="text-xl sm:text-3xl font-bold text-gray-900 mt-1">{submissions.length}</p>
                 </div>
                 <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-br from-blue-100 to-blue-200 rounded-xl flex items-center justify-center">
                   <span className="text-blue-600 text-lg sm:text-xl">📝</span>
@@ -240,11 +246,11 @@ const StudentDashboard = ({ user }: StudentDashboardProps) => {
           </Card>
           
           <Card className="bg-white/70 backdrop-blur-xl border-0 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105">
-            <CardContent className="p-4 sm:p-6">
+            <CardContent className="p-3 sm:p-6">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-xs sm:text-sm font-medium text-gray-600">Class Work</p>
-                  <p className="text-2xl sm:text-3xl font-bold text-gray-900 mt-1">
+                  <p className="text-xl sm:text-3xl font-bold text-gray-900 mt-1">
                     {submissions.filter(s => s.type === 'classwork').length}
                   </p>
                 </div>
@@ -256,11 +262,11 @@ const StudentDashboard = ({ user }: StudentDashboardProps) => {
           </Card>
           
           <Card className="bg-white/70 backdrop-blur-xl border-0 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 sm:col-span-2 lg:col-span-1">
-            <CardContent className="p-4 sm:p-6">
+            <CardContent className="p-3 sm:p-6">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-xs sm:text-sm font-medium text-gray-600">Homework</p>
-                  <p className="text-2xl sm:text-3xl font-bold text-gray-900 mt-1">
+                  <p className="text-xl sm:text-3xl font-bold text-gray-900 mt-1">
                     {submissions.filter(s => s.type === 'homework').length}
                   </p>
                 </div>
@@ -307,6 +313,7 @@ const StudentDashboard = ({ user }: StudentDashboardProps) => {
             </Card>
           </TabsContent>
 
+          {/* Improved Submission History section for mobile */}
           <TabsContent value="history" className="mt-4 sm:mt-6">
             <Card className="bg-white/70 backdrop-blur-xl border-0 shadow-xl">
               <CardHeader className="p-4 sm:p-6">
@@ -315,8 +322,11 @@ const StudentDashboard = ({ user }: StudentDashboardProps) => {
                   View and manage all your submitted work
                 </CardDescription>
               </CardHeader>
-              <CardContent className="p-4 sm:p-6 pt-0">
-                <SubmissionHistory submissions={submissions} loading={loading} onRefresh={loadSubmissions} />
+              <CardContent className="p-0 sm:p-6 sm:pt-0">
+                {/* Wrap in scroll container for mobile */}
+                <div className="overflow-x-auto">
+                  <SubmissionHistory submissions={submissions} loading={loading} onRefresh={loadSubmissions} />
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
