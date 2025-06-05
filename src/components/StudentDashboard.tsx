@@ -1,37 +1,77 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { User } from "firebase/auth";
 import SubmissionForm from "./SubmissionForm";
 import SubmissionHistory from "./SubmissionHistory";
+import { useFirebaseAuth } from "@/hooks/useFirebaseAuth";
+import { submissionService, Submission } from "@/services/submissionService";
 import { useToast } from "@/hooks/use-toast";
 
 interface StudentDashboardProps {
-  studentData: any;
-  onLogout: () => void;
+  user: User;
 }
 
-const StudentDashboard = ({ studentData, onLogout }: StudentDashboardProps) => {
-  const [submissions, setSubmissions] = useState<any[]>([]);
+const StudentDashboard = ({ user }: StudentDashboardProps) => {
+  const [submissions, setSubmissions] = useState<Submission[]>([]);
+  const [loading, setLoading] = useState(true);
+  const { logout } = useFirebaseAuth();
   const { toast } = useToast();
 
-  const handleSubmission = (submissionData: any) => {
-    const newSubmission = {
-      id: Date.now(),
-      ...submissionData,
-      submittedAt: new Date().toISOString(),
-      status: "submitted"
-    };
-    
-    setSubmissions(prev => [newSubmission, ...prev]);
-    
-    toast({
-      title: "Submission Successful",
-      description: `Your ${submissionData.type} has been submitted successfully!`,
-    });
+  useEffect(() => {
+    loadSubmissions();
+  }, [user]);
+
+  const loadSubmissions = async () => {
+    try {
+      setLoading(true);
+      const userSubmissions = await submissionService.getUserSubmissions(user.uid);
+      setSubmissions(userSubmissions);
+    } catch (error) {
+      console.error('Error loading submissions:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load submissions",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSubmission = async (submissionData: any) => {
+    try {
+      const newSubmission = {
+        userId: user.uid,
+        userEmail: user.email || '',
+        userName: user.displayName || '',
+        title: submissionData.title,
+        description: submissionData.description,
+        code: submissionData.code,
+        language: submissionData.language,
+        type: submissionData.type,
+        status: "submitted"
+      };
+      
+      await submissionService.addSubmission(newSubmission);
+      await loadSubmissions(); // Refresh the submissions list
+      
+      toast({
+        title: "Submission Successful",
+        description: `Your ${submissionData.type} has been submitted successfully!`,
+      });
+    } catch (error) {
+      console.error('Error submitting:', error);
+      toast({
+        title: "Submission Failed",
+        description: "Failed to submit your work. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   return (
@@ -53,17 +93,17 @@ const StudentDashboard = ({ studentData, onLogout }: StudentDashboardProps) => {
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-3">
                 <Avatar className="w-8 h-8">
-                  <AvatarImage src={studentData.profilePicture} alt={studentData.name} />
-                  <AvatarFallback>{studentData.name.charAt(0)}</AvatarFallback>
+                  <AvatarImage src={user.photoURL || ''} alt={user.displayName || ''} />
+                  <AvatarFallback>{user.displayName?.charAt(0) || 'U'}</AvatarFallback>
                 </Avatar>
                 <div className="hidden sm:block">
-                  <p className="text-sm font-medium text-gray-900">{studentData.name}</p>
-                  <p className="text-xs text-gray-600">{studentData.email}</p>
+                  <p className="text-sm font-medium text-gray-900">{user.displayName}</p>
+                  <p className="text-xs text-gray-600">{user.email}</p>
                 </div>
               </div>
               <Button
                 variant="outline"
-                onClick={onLogout}
+                onClick={logout}
                 className="text-gray-600 hover:text-gray-900"
               >
                 Logout
@@ -81,7 +121,7 @@ const StudentDashboard = ({ studentData, onLogout }: StudentDashboardProps) => {
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle className="text-2xl font-bold">Welcome back, {studentData.name}!</CardTitle>
+                  <CardTitle className="text-2xl font-bold">Welcome back, {user.displayName}!</CardTitle>
                   <CardDescription className="text-blue-100 mt-2">
                     Data Analysis Internship • 3 Months Program
                   </CardDescription>
@@ -155,7 +195,7 @@ const StudentDashboard = ({ studentData, onLogout }: StudentDashboardProps) => {
           </TabsContent>
 
           <TabsContent value="history">
-            <SubmissionHistory submissions={submissions} />
+            <SubmissionHistory submissions={submissions} loading={loading} />
           </TabsContent>
         </Tabs>
       </main>

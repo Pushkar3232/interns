@@ -1,28 +1,28 @@
 
-import { useState } from "react";
 import LoginPage from "@/components/LoginPage";
 import StudentDashboard from "@/components/StudentDashboard";
+import { useFirebaseAuth } from "@/hooks/useFirebaseAuth";
 
 const Index = () => {
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [studentData, setStudentData] = useState(null);
+  const { user, loading } = useFirebaseAuth();
 
-  const handleLogin = (userData: any) => {
-    setStudentData(userData);
-    setIsLoggedIn(true);
-  };
-
-  const handleLogout = () => {
-    setIsLoggedIn(false);
-    setStudentData(null);
-  };
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50">
-      {!isLoggedIn ? (
-        <LoginPage onLogin={handleLogin} />
+      {!user ? (
+        <LoginPage />
       ) : (
-        <StudentDashboard studentData={studentData} onLogout={handleLogout} />
+        <StudentDashboard user={user} />
       )}
     </div>
   );

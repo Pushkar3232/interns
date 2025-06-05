@@ -1,38 +1,17 @@
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { useState } from "react";
-import { useToast } from "@/hooks/use-toast";
+import { useFirebaseAuth } from "@/hooks/useFirebaseAuth";
 
-interface LoginPageProps {
-  onLogin: (userData: any) => void;
-}
-
-const LoginPage = ({ onLogin }: LoginPageProps) => {
-  const [isLoading, setIsLoading] = useState(false);
-  const { toast } = useToast();
+const LoginPage = () => {
+  const { signInWithGoogle, loading } = useFirebaseAuth();
 
   const handleGoogleLogin = async () => {
-    setIsLoading(true);
-    
-    // Simulate Google login - In real implementation, you'd integrate with Google OAuth
-    setTimeout(() => {
-      const mockUserData = {
-        id: "student_" + Math.random().toString(36).substr(2, 9),
-        name: "John Doe",
-        email: "john.doe@example.com",
-        profilePicture: "https://via.placeholder.com/40",
-        joinDate: new Date().toISOString(),
-      };
-      
-      toast({
-        title: "Login Successful",
-        description: "Welcome to V2V Edtech Student Portal!",
-      });
-      
-      onLogin(mockUserData);
-      setIsLoading(false);
-    }, 2000);
+    try {
+      await signInWithGoogle();
+    } catch (error) {
+      console.error('Login error:', error);
+    }
   };
 
   return (
@@ -58,10 +37,10 @@ const LoginPage = ({ onLogin }: LoginPageProps) => {
           <CardContent>
             <Button
               onClick={handleGoogleLogin}
-              disabled={isLoading}
+              disabled={loading}
               className="w-full h-12 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-medium transition-all duration-200 shadow-lg hover:shadow-xl"
             >
-              {isLoading ? (
+              {loading ? (
                 <div className="flex items-center gap-2">
                   <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
                   Signing in...
