@@ -1,4 +1,3 @@
-
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -7,9 +6,10 @@ import { useState } from "react";
 
 interface SubmissionHistoryProps {
   submissions: any[];
+  loading: boolean;
 }
 
-const SubmissionHistory = ({ submissions }: SubmissionHistoryProps) => {
+const SubmissionHistory = ({ submissions, loading }: SubmissionHistoryProps) => {
   const [expandedItems, setExpandedItems] = useState<Set<number>>(new Set());
 
   const toggleExpanded = (id: number) => {
@@ -39,6 +39,23 @@ const SubmissionHistory = ({ submissions }: SubmissionHistoryProps) => {
   const getTypeColor = (type: string) => {
     return type === 'classwork' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800';
   };
+
+  if (loading) {
+    return (
+      <Card className="bg-white/60 backdrop-blur-sm border-0 shadow-xl">
+        <CardHeader>
+          <CardTitle className="text-2xl font-bold text-gray-900">Submission History</CardTitle>
+          <CardDescription>Loading your submissions...</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="text-center py-12">
+            <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+            <p className="text-gray-600">Loading submissions...</p>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
   if (submissions.length === 0) {
     return (
