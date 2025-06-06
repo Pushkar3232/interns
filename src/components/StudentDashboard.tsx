@@ -217,7 +217,7 @@ const StudentDashboard = ({ user }: StudentDashboardProps) => {
                     Welcome back, {user.displayName?.split(' ')[0]}! 👋
                   </CardTitle>
                   <CardDescription className="text-blue-100 mt-2 text-sm sm:text-base">
-                    Data Analysis Internship • 3 Months Program
+                    Internship • 3 Months Program
                   </CardDescription>
                 </div>
                 <Badge variant="secondary" className="bg-white/20 text-white border-white/30 backdrop-blur-sm w-fit">
