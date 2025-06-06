@@ -116,16 +116,15 @@ const SubmissionForm = ({ onSubmit }: SubmissionFormProps) => {
                   </div>
                   
                   <div className="space-y-2">
-                    <Label htmlFor="language">Programming Language</Label>
+                    <Label htmlFor="language">Select Internship</Label>
                     <Select value={formData.language} onValueChange={(value) => updateFormData("language", value)}>
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="python">Python</SelectItem>
-                        <SelectItem value="r">R</SelectItem>
-                        <SelectItem value="sql">SQL</SelectItem>
-                        <SelectItem value="javascript">JavaScript</SelectItem>
+                        <SelectItem value="Data Analysis">Data Analysis</SelectItem>
+                        <SelectItem value="Mobile Application Development">Mobile Application Development </SelectItem>
+                        <SelectItem value="Web Development">Web Development</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -196,16 +195,15 @@ const SubmissionForm = ({ onSubmit }: SubmissionFormProps) => {
                   </div>
                   
                   <div className="space-y-2">
-                    <Label htmlFor="language-hw">Programming Language</Label>
+                    <Label htmlFor="language-hw">Select Internship</Label>
                     <Select value={formData.language} onValueChange={(value) => updateFormData("language", value)}>
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="python">Python</SelectItem>
-                        <SelectItem value="r">R</SelectItem>
-                        <SelectItem value="sql">SQL</SelectItem>
-                        <SelectItem value="javascript">JavaScript</SelectItem>
+                        <SelectItem value="Data Analysis">Data Analysis</SelectItem>
+                        <SelectItem value="Mobile Application Development">Mobile Application Development</SelectItem>
+                        <SelectItem value="Web Development">Web Development</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
