@@ -782,7 +782,30 @@ const AdminDashboard = () => {
                                               {group.userName.charAt(0).toUpperCase()}
                                             </div>
                                             <div>
-                                              <h4 className="font-semibold text-gray-900">{group.userName}</h4>
+                                              <h4 className="font-semibold text-gray-900 flex items-center gap-3">
+                                                <span>{group.userName}</span>
+
+                                                <div className="flex items-center gap-1">
+                                                  {group.submissions.some(sub => sub.type === "classwork") && (
+                                                    <span
+                                                      title="Classwork submitted"
+                                                      className="text-blue-600 bg-blue-100 rounded-full p-1"
+                                                    >
+                                                      <Code className="w-4 h-4" />
+                                                    </span>
+                                                  )}
+                                                  {group.submissions.some(sub => sub.type === "homework") && (
+                                                    <span
+                                                      title="Homework submitted"
+                                                      className="text-purple-600 bg-purple-100 rounded-full p-1"
+                                                    >
+                                                      <BookOpen className="w-4 h-4" />
+                                                    </span>
+                                                  )}
+                                                </div>
+                                              </h4>
+
+
                                               <p className="text-xs text-gray-600">{group.userEmail}</p>
                                             </div>
                                           </div>
