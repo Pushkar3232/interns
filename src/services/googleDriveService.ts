@@ -2,10 +2,13 @@
 
 let accessToken: string | null = null;
 
+/**
+ * Waits until the Google Identity Services script is available.
+ */
 export const waitForGoogle = async (): Promise<void> => {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     const check = () => {
-      if (window.google && window.google.accounts && window.google.accounts.oauth2) {
+      if (window.google?.accounts?.oauth2) {
         resolve();
       } else {
         setTimeout(check, 100);
@@ -15,29 +18,38 @@ export const waitForGoogle = async (): Promise<void> => {
   });
 };
 
+/**
+ * Requests an access token from Google Identity Services for Drive API.
+ * Must be called before uploading.
+ */
 export const requestDriveAccessToken = async (clientId: string): Promise<string> => {
-  await waitForGoogle(); // ✅ Wait for GIS to load
+  await waitForGoogle();
 
   return new Promise((resolve, reject) => {
-    const client = window.google.accounts.oauth2.initTokenClient({
+    const tokenClient = window.google.accounts.oauth2.initTokenClient({
       client_id: clientId,
       scope: "https://www.googleapis.com/auth/drive.file",
       callback: (response) => {
         if (response.error) {
+          console.error("❌ Error getting access token:", response);
           reject(response);
         } else {
-          resolve(response.access_token);
+          accessToken = response.access_token;
+          console.log("🔐 Access token received:", accessToken);
+          resolve(accessToken);
         }
       },
     });
 
-    client.requestAccessToken();
+    tokenClient.requestAccessToken();
   });
 };
 
-
-export const uploadFileToDrive = async (file: File): Promise<string> => {
-  if (!accessToken) throw new Error("No access token. Call requestDriveAccessToken first.");
+/**
+ * Uploads a file to the user's Google Drive and returns a public link.
+ */
+export const uploadFileToDrive = async (file: File, accessToken: string): Promise<string> => {
+  console.log("📤 Starting upload to Google Drive...");
 
   const metadata = {
     name: file.name,
@@ -60,7 +72,13 @@ export const uploadFileToDrive = async (file: File): Promise<string> => {
   );
 
   const uploadData = await uploadRes.json();
+  console.log("📎 Uploaded file ID:", uploadData.id);
 
+  if (!uploadData.id) {
+    throw new Error("❌ Upload failed: no file ID returned.");
+  }
+
+  // Set file to be publicly viewable
   await fetch(`https://www.googleapis.com/drive/v3/files/${uploadData.id}/permissions`, {
     method: "POST",
     headers: {
@@ -70,5 +88,8 @@ export const uploadFileToDrive = async (file: File): Promise<string> => {
     body: JSON.stringify({ role: "reader", type: "anyone" }),
   });
 
-  return `https://drive.google.com/file/d/${uploadData.id}/view`;
+  const viewUrl = `https://drive.google.com/file/d/${uploadData.id}/view`;
+  console.log("🔗 Public file link:", viewUrl);
+
+  return viewUrl;
 };
