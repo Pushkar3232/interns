@@ -104,75 +104,30 @@ const SubmissionHistory = ({ submissions, loading, onRefresh }: SubmissionHistor
       <CardContent>
         <div className="space-y-4">
           {submissions.map((submission) => (
-            <Card key={submission.id} className="border shadow-sm hover:shadow-md transition-all duration-200">
-              <Collapsible>
-                <CollapsibleTrigger
-                  onClick={() => submission.id && toggleExpanded(submission.id)}
-                  className="w-full"
-                >
-                  <CardHeader className="pb-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <span className="text-2xl">{getTypeIcon(submission.type)}</span>
-                        <div className="text-left">
-                          <CardTitle className="text-lg">{submission.title}</CardTitle>
-                          <CardDescription>
-                            {formatDate(submission.submittedAt)}
-                          </CardDescription>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Badge className={getTypeColor(submission.type)}>
-                          {submission.type === 'classwork' ? 'Class Work' : 'Homework'}
-                        </Badge>
-                        <Badge variant="outline" className="text-green-600 border-green-300 bg-green-50">
-                          {submission.status}
-                        </Badge>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="p-1 h-8 w-8"
-                        >
-                          <span className={`transform transition-transform duration-200 ${
-                            submission.id && expandedItems.has(submission.id) ? 'rotate-180' : ''
-                          }`}>
-                            ▼
-                          </span>
-                        </Button>
-                      </div>
-                    </div>
-                  </CardHeader>
-                </CollapsibleTrigger>
-                
-                <CollapsibleContent>
-                  <CardContent className="pt-0">
-                    <div className="space-y-4">
-                      {submission.description && (
-                        <div>
-                          <h4 className="font-semibold text-sm text-gray-700 mb-2">Description:</h4>
-                          <p className="text-gray-600 text-sm bg-gray-50 p-3 rounded-lg">
-                            {submission.description}
-                          </p>
-                        </div>
-                      )}
-                      
-                      <div>
-                        <div className="flex items-center justify-between mb-2">
-                          <h4 className="font-semibold text-sm text-gray-700">Code:</h4>
-                          <Badge variant="outline" className="text-xs">
-                            {submission.language}
-                          </Badge>
-                        </div>
-                        <pre className="bg-gray-900 text-gray-100 p-4 rounded-lg overflow-x-auto text-sm">
-                          <code>{submission.code}</code>
-                        </pre>
-                      </div>
-                    </div>
-                  </CardContent>
-                </CollapsibleContent>
-              </Collapsible>
-            </Card>
-          ))}
+  <div key={submission.id} className="border p-4 rounded shadow-sm bg-white/80">
+    <div className="flex justify-between items-center">
+      <div>
+        <h3 className="font-semibold text-lg text-gray-800">{submission.title}</h3>
+        <p className="text-sm text-gray-600">{submission.description}</p>
+        <p className="text-xs text-gray-400 mt-1">Type: {submission.type}</p>
+        <p className="text-xs text-gray-400">Status: {submission.status}</p>
+      </div>
+      <div>
+        {submission.fileUrl && (
+          <a
+            href={submission.fileUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-block px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
+          >
+            View File
+          </a>
+        )}
+      </div>
+    </div>
+  </div>
+))}
+
         </div>
       </CardContent>
     </Card>

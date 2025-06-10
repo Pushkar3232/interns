@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -6,7 +5,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 
 interface SubmissionFormProps {
@@ -18,46 +16,47 @@ const SubmissionForm = ({ onSubmit }: SubmissionFormProps) => {
   const [formData, setFormData] = useState({
     title: "",
     description: "",
-    code: "",
-    language: "python"
+    file: null as File | null,
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
 
+  const updateFormData = (field: string, value: any) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!formData.title || !formData.code) {
+
+    if (!formData.title || !formData.file) {
       toast({
         title: "Validation Error",
-        description: "Please fill in all required fields.",
+        description: "Title and file are required.",
         variant: "destructive",
       });
       return;
     }
 
     setIsSubmitting(true);
-    
+
     try {
       await onSubmit({
         ...formData,
-        type: activeTab
+        type: activeTab,
       });
-      
-      // Reset form only after successful submission
+
       setFormData({
         title: "",
         description: "",
-        code: "",
-        language: "python"
+        file: null,
       });
-      
+
       toast({
         title: "Submission Successful",
         description: `Your ${activeTab} has been submitted successfully!`,
       });
     } catch (error) {
-      console.error('Submission error:', error);
+      console.error("Submission error:", error);
       toast({
         title: "Submission Failed",
         description: "Failed to submit your work. Please try again.",
@@ -68,16 +67,12 @@ const SubmissionForm = ({ onSubmit }: SubmissionFormProps) => {
     }
   };
 
-  const updateFormData = (field: string, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
-  };
-
   return (
     <Card className="bg-white/60 backdrop-blur-sm border-0 shadow-xl">
       <CardHeader>
         <CardTitle className="text-2xl font-bold text-gray-900">Submit Your Work</CardTitle>
         <CardDescription>
-          Submit your data analysis code and documentation for review
+          Upload your assignment as a PDF or Word document
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -94,161 +89,107 @@ const SubmissionForm = ({ onSubmit }: SubmissionFormProps) => {
           </TabsList>
 
           <TabsContent value="classwork">
-            <div className="space-y-6">
-              <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-                <h3 className="font-semibold text-blue-900 mb-2">Class Work Submission</h3>
-                <p className="text-blue-700 text-sm">
-                  Submit your in-class data analysis exercises and practice problems here.
-                </p>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="title">Assignment Title *</Label>
+                <Input
+                  id="title"
+                  placeholder="e.g., Classwork Report"
+                  value={formData.title}
+                  onChange={(e) => updateFormData("title", e.target.value)}
+                  required
+                />
               </div>
-              
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="title">Assignment Title *</Label>
-                    <Input
-                      id="title"
-                      placeholder="e.g., Data Cleaning Exercise 1"
-                      value={formData.title}
-                      onChange={(e) => updateFormData("title", e.target.value)}
-                      required
-                    />
+
+              <div className="space-y-2">
+                <Label htmlFor="description">Description</Label>
+                <Textarea
+                  id="description"
+                  placeholder="Optional description of your submission"
+                  value={formData.description}
+                  onChange={(e) => updateFormData("description", e.target.value)}
+                  rows={3}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="file">Upload File (PDF/DOC) *</Label>
+                <Input
+                  id="file"
+                  type="file"
+                  accept=".pdf,.doc,.docx"
+                  onChange={(e) => updateFormData("file", e.target.files?.[0] || null)}
+                  required
+                />
+              </div>
+
+              <Button
+                type="submit"
+                disabled={isSubmitting}
+                className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 h-12"
+              >
+                {isSubmitting ? (
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    Submitting...
                   </div>
-                  
-                  <div className="space-y-2">
-                    <Label htmlFor="language">Select Internship</Label>
-                    <Select value={formData.language} onValueChange={(value) => updateFormData("language", value)}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Data Analysis">Data Analysis</SelectItem>
-                        <SelectItem value="Mobile Application Development">Mobile Application Development </SelectItem>
-                        <SelectItem value="Web Development">Web Development</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="description">Description</Label>
-                  <Textarea
-                    id="description"
-                    placeholder="Brief description of your work, methodology, or findings..."
-                    value={formData.description}
-                    onChange={(e) => updateFormData("description", e.target.value)}
-                    rows={3}
-                  />
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="code">Code *</Label>
-                  <Textarea
-                    id="code"
-                    placeholder="Paste your code here..."
-                    value={formData.code}
-                    onChange={(e) => updateFormData("code", e.target.value)}
-                    rows={12}
-                    className="font-mono text-sm"
-                    required
-                  />
-                </div>
-                
-                <Button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 h-12"
-                >
-                  {isSubmitting ? (
-                    <div className="flex items-center gap-2">
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                      Submitting...
-                    </div>
-                  ) : (
-                    "Submit Class Work"
-                  )}
-                </Button>
-              </form>
-            </div>
+                ) : (
+                  "Submit Class Work"
+                )}
+              </Button>
+            </form>
           </TabsContent>
 
           <TabsContent value="homework">
-            <div className="space-y-6">
-              <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
-                <h3 className="font-semibold text-purple-900 mb-2">Homework Submission</h3>
-                <p className="text-purple-700 text-sm">
-                  Submit your take-home assignments and project work here.
-                </p>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="title-hw">Assignment Title *</Label>
+                <Input
+                  id="title-hw"
+                  placeholder="e.g., Homework 1"
+                  value={formData.title}
+                  onChange={(e) => updateFormData("title", e.target.value)}
+                  required
+                />
               </div>
-              
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="title-hw">Assignment Title *</Label>
-                    <Input
-                      id="title-hw"
-                      placeholder="e.g., Weekly Data Analysis Project"
-                      value={formData.title}
-                      onChange={(e) => updateFormData("title", e.target.value)}
-                      required
-                    />
+
+              <div className="space-y-2">
+                <Label htmlFor="description-hw">Description</Label>
+                <Textarea
+                  id="description-hw"
+                  placeholder="Optional description of your homework"
+                  value={formData.description}
+                  onChange={(e) => updateFormData("description", e.target.value)}
+                  rows={3}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="file-hw">Upload File (PDF/DOC) *</Label>
+                <Input
+                  id="file-hw"
+                  type="file"
+                  accept=".pdf,.doc,.docx"
+                  onChange={(e) => updateFormData("file", e.target.files?.[0] || null)}
+                  required
+                />
+              </div>
+
+              <Button
+                type="submit"
+                disabled={isSubmitting}
+                className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 h-12"
+              >
+                {isSubmitting ? (
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    Submitting...
                   </div>
-                  
-                  <div className="space-y-2">
-                    <Label htmlFor="language-hw">Select Internship</Label>
-                    <Select value={formData.language} onValueChange={(value) => updateFormData("language", value)}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Data Analysis">Data Analysis</SelectItem>
-                        <SelectItem value="Mobile Application Development">Mobile Application Development</SelectItem>
-                        <SelectItem value="Web Development">Web Development</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="description-hw">Description</Label>
-                  <Textarea
-                    id="description-hw"
-                    placeholder="Brief description of your work, methodology, or findings..."
-                    value={formData.description}
-                    onChange={(e) => updateFormData("description", e.target.value)}
-                    rows={3}
-                  />
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="code-hw">Code *</Label>
-                  <Textarea
-                    id="code-hw"
-                    placeholder="Paste your code here..."
-                    value={formData.code}
-                    onChange={(e) => updateFormData("code", e.target.value)}
-                    rows={12}
-                    className="font-mono text-sm"
-                    required
-                  />
-                </div>
-                
-                <Button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 h-12"
-                >
-                  {isSubmitting ? (
-                    <div className="flex items-center gap-2">
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                      Submitting...
-                    </div>
-                  ) : (
-                    "Submit Homework"
-                  )}
-                </Button>
-                </form>
-            </div>
+                ) : (
+                  "Submit Homework"
+                )}
+              </Button>
+            </form>
           </TabsContent>
         </Tabs>
       </CardContent>

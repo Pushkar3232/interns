@@ -1,15 +1,14 @@
-// submissionService.ts
+// src/services/submissionService.ts
+
+import { db } from "@/lib/firebase";
 import {
   collection,
   addDoc,
-  getDocs,
   query,
   where,
+  getDocs,
   Timestamp,
-  doc,
-  setDoc,
 } from "firebase/firestore";
-import { db } from "@/lib/firebase"; // Update path based on your structure
 
 export interface Submission {
   id?: string;
@@ -18,42 +17,30 @@ export interface Submission {
   userName: string;
   title: string;
   description?: string;
-  code: string;
-  language: string;
-  type: "classwork" | "homework";
-  status: string;
-  submittedAt?: Date;
+  fileUrl: string; // ✅ NEW
+  type: "homework" | "classwork";
+  status: "submitted" | "reviewed";
+  createdAt?: Timestamp;
 }
 
-const submissionService = {
-  // Add a new submission for a user (under /users/{userId}/submissions/)
-  async addSubmission(submission: Submission) {
-    const userSubmissionsRef = collection(
-      db,
-      "users",
-      submission.userId,
-      "submissions"
-    );
-
-    const dataToSave = {
-      ...submission,
-      submittedAt: Timestamp.now(),
-    };
-
-    await addDoc(userSubmissionsRef, dataToSave);
-  },
-
-  // Get all submissions for a specific user
-  async getUserSubmissions(userId: string): Promise<Submission[]> {
-    const userSubmissionsRef = collection(db, "users", userId, "submissions");
-
-    const snapshot = await getDocs(userSubmissionsRef);
-    return snapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...(doc.data() as Submission),
-      submittedAt: doc.data().submittedAt?.toDate(),
-    }));
-  },
+const addSubmission = async (data: Submission) => {
+  const submissionRef = collection(db, "submissions");
+  await addDoc(submissionRef, {
+    ...data,
+    createdAt: Timestamp.now(),
+  });
 };
 
-export { submissionService };
+const getUserSubmissions = async (userId: string): Promise<Submission[]> => {
+  const q = query(collection(db, "submissions"), where("userId", "==", userId));
+  const snap = await getDocs(q);
+  return snap.docs.map(doc => ({
+    id: doc.id,
+    ...(doc.data() as Submission),
+  }));
+};
+
+export const submissionService = {
+  addSubmission,
+  getUserSubmissions,
+};

@@ -1,6 +1,6 @@
 
 import LoginPage from "@/components/LoginPage";
-import StudentDashboard from "@/components/StudentDashboard";
+import StudentDashboard from "@/pages/StudentDashboard";
 import { useFirebaseAuth } from "@/hooks/useFirebaseAuth";
 
 const Index = () => {
