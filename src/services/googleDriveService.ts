@@ -2,12 +2,23 @@
 
 let accessToken: string | null = null;
 
-export const requestDriveAccessToken = async (clientId: string): Promise<string> => {
+export const waitForGoogle = async (): Promise<void> => {
   return new Promise((resolve, reject) => {
-    if (!window.google?.accounts?.oauth2) {
-      return reject("Google Identity Services not loaded.");
-    }
+    const check = () => {
+      if (window.google && window.google.accounts && window.google.accounts.oauth2) {
+        resolve();
+      } else {
+        setTimeout(check, 100);
+      }
+    };
+    check();
+  });
+};
 
+export const requestDriveAccessToken = async (clientId: string): Promise<string> => {
+  await waitForGoogle(); // ✅ Wait for GIS to load
+
+  return new Promise((resolve, reject) => {
     const client = window.google.accounts.oauth2.initTokenClient({
       client_id: clientId,
       scope: "https://www.googleapis.com/auth/drive.file",
@@ -15,8 +26,7 @@ export const requestDriveAccessToken = async (clientId: string): Promise<string>
         if (response.error) {
           reject(response);
         } else {
-          accessToken = response.access_token;
-          resolve(accessToken);
+          resolve(response.access_token);
         }
       },
     });
@@ -24,6 +34,7 @@ export const requestDriveAccessToken = async (clientId: string): Promise<string>
     client.requestAccessToken();
   });
 };
+
 
 export const uploadFileToDrive = async (file: File): Promise<string> => {
   if (!accessToken) throw new Error("No access token. Call requestDriveAccessToken first.");

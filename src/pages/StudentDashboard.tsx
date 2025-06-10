@@ -74,10 +74,10 @@ const handleSubmit = async (data: any) => {
 
   try {
     // ✅ Use your real OAuth client ID here
-    await requestDriveAccessToken("231620518414-0p9kh2bhr3fl7shtitjpvmuerbmo6mvo.apps.googleusercontent.com");
+  const accessToken = await requestDriveAccessToken("231620518414-0p9kh2bhr3fl7shtitjpvmuerbmo6mvo.apps.googleusercontent.com");
+    
 
-
-    const fileUrl = await uploadFileToDrive(data.file);
+    const fileUrl = await uploadFileToDrive(data.file, accessToken);
     console.log("✅ File uploaded to Drive:", fileUrl);
 
     const newSubmission = {
