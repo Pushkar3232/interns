@@ -5,7 +5,7 @@ import { User } from "firebase/auth";
 import { useFirebaseAuth } from "@/hooks/useFirebaseAuth";
 import { useToast } from "@/hooks/use-toast";
 import { submissionService, Submission } from "@/services/submissionService";
-import { initGapi, signInToGoogle, uploadFileToDrive } from "@/services/googleDriveService";
+import { requestDriveAccessToken, uploadFileToDrive } from "@/services/googleDriveService";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -74,8 +74,8 @@ const handleSubmit = async (data: any) => {
 
   try {
     // ✅ Use your real OAuth client ID here
-    await initGapi("231620518414-0p9kh2bhr3fl7shtitjpvmuerbmo6mvo.apps.googleusercontent.com");
-    await signInToGoogle();
+    await requestDriveAccessToken("231620518414-0p9kh2bhr3fl7shtitjpvmuerbmo6mvo.apps.googleusercontent.com");
+
 
     const fileUrl = await uploadFileToDrive(data.file);
     console.log("✅ File uploaded to Drive:", fileUrl);
