@@ -47,19 +47,29 @@ const StudentDashboard = ({ user }: StudentDashboardProps) => {
   }, [user?.uid]);
 
   // Fetch submissions
-  const loadSubmissions = async () => {
-    if (!user?.uid) return;
-    setLoadingSubmissions(true);
-    try {
-      const userSubmissions = await submissionService.getUserSubmissions(user.uid);
-      setSubmissions(userSubmissions);
-      toast({ title: "Submissions loaded", description: `Found ${userSubmissions.length} items` });
-    } catch (err) {
-      toast({ title: "Error", description: "Could not load submissions", variant: "destructive" });
-    } finally {
-      setLoadingSubmissions(false);
-    }
-  };
+const loadSubmissions = async () => {
+  if (!user?.uid) return;
+  setLoadingSubmissions(true);
+
+  try {
+    const userSubmissions = await submissionService.getUserSubmissions(user.uid);
+    
+    console.log("📦 Loaded submissions:", userSubmissions);
+    setSubmissions(userSubmissions);
+
+    toast({ title: "Submissions loaded", description: `Found ${userSubmissions.length} items` });
+  } catch (err) {
+    console.error("❌ Failed to load submissions:", err);
+    toast({
+      title: "Error",
+      description: "Could not load submissions. Are extensions blocking it?",
+      variant: "destructive",
+    });
+  } finally {
+    setLoadingSubmissions(false); // 💡 Make sure this always runs
+  }
+};
+
 
   useEffect(() => {
     loadSubmissions();
