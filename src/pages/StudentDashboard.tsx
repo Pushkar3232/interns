@@ -77,42 +77,39 @@ const loadSubmissions = async () => {
 
   
 const handleSubmit = async (data: any) => {
-  if (!data.file) {
-    toast({ title: "File Missing", description: "Please upload a file", variant: "destructive" });
-    return;
-  }
-
   try {
-    // ✅ Use your real OAuth client ID here
-  const accessToken = await requestDriveAccessToken("231620518414-0p9kh2bhr3fl7shtitjpvmuerbmo6mvo.apps.googleusercontent.com");
-    
+    console.log("🚀 Submission started", data);
 
-    const fileUrl = await uploadFileToDrive(data.file, accessToken);
-    console.log("✅ File uploaded to Drive:", fileUrl);
+    if (!data.file) {
+      toast({ title: "No file", description: "Please upload a file", variant: "destructive" });
+      return;
+    }
 
-    const newSubmission = {
+    const clientId = "231620518414-0p9kh2bhr3fl7shtitjpvmuerbmo6mvo.apps.googleusercontent.com";
+    const token = await requestDriveAccessToken(clientId);
+    const fileUrl = await uploadFileToDrive(data.file, token);
+    console.log("📎 File URL:", fileUrl);
+
+    const submission = {
       userId: user.uid,
       userEmail: user.email || "",
       userName: profile?.name || user.displayName || "Unknown",
       title: data.title,
       description: data.description || "",
-      fileUrl: fileUrl,
+      fileUrl,
       type: data.type || "homework",
       status: "submitted",
     };
 
-    console.log("🔥 SUBMITTING TO FIRESTORE:", newSubmission);
+    console.log("🔥 Submitting to Firestore:", submission);
+    await submissionService.addSubmission(submission);
+    console.log("✅ Submission saved to Firestore");
 
-    await submissionService.addSubmission(newSubmission);
-    toast({ title: "Success", description: "Submission uploaded!" });
+    toast({ title: "Done", description: "Submission complete." });
     await loadSubmissions();
   } catch (error) {
-    toast({
-      title: "Error",
-      description: "Failed to submit. Check console logs.",
-      variant: "destructive",
-    });
     console.error("❌ Submission failed:", error);
+    toast({ title: "Error", description: "Submission failed. See console.", variant: "destructive" });
   }
 };
 
