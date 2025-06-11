@@ -1,585 +1,382 @@
-// src/pages/AdminDashboard.tsx
 import { useEffect, useState } from "react";
-import { collectionGroup, getDocs, collection, doc, getDoc } from "firebase/firestore";
-import { db } from "@/lib/firebase";
-import {
-  Card,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-  CardContent,
-} from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { submissionService, Submission } from "@/services/submissionService";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
-import { AlertCircle, Users, FileText, Calendar, Code, RefreshCw, BookOpen, Clock, Filter } from "lucide-react";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
+import { COLLEGES } from "@/constants/colleges";
+import { 
+  Calendar, 
+  Download, 
+  Filter, 
+  LogOut, 
+  RefreshCw, 
+  Users, 
+  FileText, 
+  TrendingUp, 
+  Eye,
+  Search,
+  BarChart3,
+  Clock,
+  CheckCircle,
+  AlertCircle
+} from "lucide-react";
 
-interface Submission {
-  id: string;
-  userId: string;
-  userName: string;
-  userEmail: string;
-  title: string;
-  description?: string;
-  code: string;
-  language: string;
-  type: "classwork" | "homework";
-  status: string;
-  submittedAt?: Date;
-}
+const COURSES = ["Web Development", "Data Analysis", "Mobile Application Development"];
 
-interface UserGroup {
-  userId: string;
-  userName: string;
-  userEmail: string;
-  submissions: Submission[];
-  totalSubmissions: number;
-  latestSubmission?: Date;
-}
-
-interface DailyGroup {
+interface DayStats {
   date: string;
-  displayDate: string;
-  userGroups: UserGroup[];
-  totalSubmissions: number;
+  submissions: Submission[];
+  totalCount: number;
+  collegeBreakdown: { [college: string]: number };
+  courseBreakdown: { [course: string]: number };
+  typeBreakdown: { [type: string]: number };
+  studentSubmissions: { [email: string]: Submission[] }; // Add this line
 }
-
-interface SubjectGroup {
-  subject: string;
-  displayName: string;
-  dailyGroups: DailyGroup[];
-  totalSubmissions: number;
-  totalStudents: number;
-}
-
-interface AdminStats {
-  totalStudents: number;
-  totalSubmissions: number;
-  classworkCount: number;
-  homeworkCount: number;
-  recentSubmissions: number;
-  subjectStats: Record<string, number>;
-}
-
-const TEACHER_ACCESS = {
-  "pushkar_shinde": ["Data Analysis", "Mobile Application Development", "Web Development"], // Admin access to all subjects
-  "da_teacher": ["Data Analysis"], // Data Analysis teacher
-  "mad_teacher": ["Mobile Application Development"], // Mobile App Development teacher
-  "webd_teacher": ["Web Development"], // Web Development teacher
-};
-
-// Subject display names (full names are already display names)
-const SUBJECT_NAMES = {
-  "Data Analysis": "Data Analysis",
-  "Mobile Application Development": "Mobile Application Development",
-  "Web Development": "Web Development"
-};
-
 
 const AdminDashboard = () => {
-  const [subjectGroups, setSubjectGroups] = useState<SubjectGroup[]>([]);
-  const [stats, setStats] = useState<AdminStats>({
-    totalStudents: 0,
-    totalSubmissions: 0,
-    classworkCount: 0,
-    homeworkCount: 0,
-    recentSubmissions: 0,
-    subjectStats: {}
-  });
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const [loggedIn, setLoggedIn] = useState(false);
-  const [currentUser, setCurrentUser] = useState("");
-  const [userInput, setUserInput] = useState({ id: "", pass: "" });
-  const [expandedSubjects, setExpandedSubjects] = useState<Set<string>>(new Set());
+
+  const [allSubmissions, setAllSubmissions] = useState<Submission[]>([]);
+  const [filteredSubmissions, setFilteredSubmissions] = useState<Submission[]>([]);
+  const [dayWiseData, setDayWiseData] = useState<DayStats[]>([]);
+
+  // Filters
+  const [collegeFilter, setCollegeFilter] = useState("");
+  const [courseFilter, setCourseFilter] = useState("");
+  const [typeFilter, setTypeFilter] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [dateRange, setDateRange] = useState({ start: "", end: "" });
+
+  // View state
+  const [activeView, setActiveView] = useState<'overview' | 'daily' | 'analytics'>('daily');
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
-  const [expandedUsers, setExpandedUsers] = useState<Set<string>>(new Set());
-  const [searchTerm, setSearchTerm] = useState("");
-  const [selectedSubject, setSelectedSubject] = useState<string>("all");
-  const [selectedDateRange, setSelectedDateRange] = useState<string>("all");
-  const [error, setError] = useState("");
 
-  useEffect(() => {
-    if (loggedIn) {
-      fetchAndGroupSubmissions();
+  const handleLogin = () => {
+    if (username === "admin" && password === "admin123") {
+      setIsLoggedIn(true);
+    } else {
+      alert("❌ Invalid credentials. Use admin / admin123");
     }
-  }, [loggedIn]);
+  };
 
-  const fetchAndGroupSubmissions = async () => {
+  const processSubmissionsData = (submissions: Submission[]) => {
+  const dayMap: { [day: string]: Submission[] } = {};
+
+  submissions.forEach(sub => {
+    if (sub.createdAt?.seconds) {
+      const date = new Date(sub.createdAt.seconds * 1000);
+      const dayKey = date.toDateString();
+
+      if (!dayMap[dayKey]) {
+        dayMap[dayKey] = [];
+      }
+      dayMap[dayKey].push(sub);
+    }
+  });
+
+  const dayStats: DayStats[] = Object.entries(dayMap)
+    .map(([date, subs]) => {
+      const collegeBreakdown: { [college: string]: number } = {};
+      const courseBreakdown: { [course: string]: number } = {};
+      const typeBreakdown: { [type: string]: number } = {};
+      const studentSubmissions: { [email: string]: Submission[] } = {};
+
+      subs.forEach(sub => {
+        // College breakdown
+        const college = sub.userCollege || 'Unknown';
+        collegeBreakdown[college] = (collegeBreakdown[college] || 0) + 1;
+
+        // Course breakdown
+        const course = sub.userCourse || 'Unknown';
+        courseBreakdown[course] = (courseBreakdown[course] || 0) + 1;
+
+        // Type breakdown
+        const type = sub.type || 'Unknown';
+        typeBreakdown[type] = (typeBreakdown[type] || 0) + 1;
+
+        // Student submissions breakdown
+        const email = sub.userEmail || 'unknown';
+        if (!studentSubmissions[email]) {
+          studentSubmissions[email] = [];
+        }
+        studentSubmissions[email].push(sub);
+      });
+
+      return {
+        date,
+        submissions: subs,
+        totalCount: subs.length,
+        collegeBreakdown,
+        courseBreakdown,
+        typeBreakdown,
+        studentSubmissions
+      };
+    })
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+  setDayWiseData(dayStats);
+};
+
+
+  const loadSubmissions = async () => {
     setLoading(true);
-    setError("");
-    
     try {
-      console.log("[DEBUG] Starting to fetch submissions...");
-      
-      // Method 1: Try collectionGroup query first
-      console.log("[DEBUG] Trying collectionGroup query...");
-      const collectionGroupSnapshot = await getDocs(collectionGroup(db, "submissions"));
-      console.log("[DEBUG] CollectionGroup query result:", collectionGroupSnapshot.size, "documents");
-
-      if (collectionGroupSnapshot.size > 0) {
-        processSubmissions(collectionGroupSnapshot);
-        return;
-      }
-
-      // Method 2: If collectionGroup doesn't work, try to fetch from known users
-      console.log("[DEBUG] CollectionGroup empty, trying alternative method...");
-      
-      try {
-        const usersSnapshot = await getDocs(collection(db, "users"));
-        console.log("[DEBUG] Found users:", usersSnapshot.size);
-        
-        const allSubmissions: any[] = [];
-        
-        for (const userDoc of usersSnapshot.docs) {
-          const userId = userDoc.id;
-          console.log("[DEBUG] Fetching submissions for user:", userId);
-          
-          const userSubmissionsSnapshot = await getDocs(
-            collection(db, "users", userId, "submissions")
-          );
-          
-          console.log("[DEBUG] User", userId, "has", userSubmissionsSnapshot.size, "submissions");
-          
-          userSubmissionsSnapshot.docs.forEach(submissionDoc => {
-            allSubmissions.push({
-              ...submissionDoc,
-              data: () => ({ ...submissionDoc.data(), userId })
-            });
-          });
-        }
-        
-        console.log("[DEBUG] Total submissions collected:", allSubmissions.length);
-        
-        if (allSubmissions.length > 0) {
-          const mockSnapshot = {
-            size: allSubmissions.length,
-            docs: allSubmissions
-          };
-          processSubmissions(mockSnapshot);
-          return;
-        }
-      } catch (userFetchError) {
-        console.log("[DEBUG] User fetch method failed:", userFetchError);
-      }
-
-      // If all methods fail
-      console.log("[DEBUG] All fetch methods failed");
-      setError("No submissions found. This could be due to:\n1. No data in database\n2. Firebase security rules blocking access\n3. Authentication issues");
-      setSubjectGroups([]);
-
-    } catch (err: any) {
-      console.error("[DEBUG] Error in fetchAndGroupSubmissions:", err);
-      setError(`Failed to fetch submissions: ${err.message}`);
-      setSubjectGroups([]);
+      const all = await submissionService.getAllSubmissions();
+      setAllSubmissions(all);
+      setFilteredSubmissions(all);
+      processSubmissionsData(all);
+    } catch (error) {
+      console.error('Error loading submissions:', error);
+      alert('❌ Error loading submissions. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
-  const processSubmissions = (snapshot: any) => {
-    console.log("[DEBUG] Processing", snapshot.size, "submissions");
-    
-    // Get allowed subjects for current user
-    const allowedSubjects = TEACHER_ACCESS[currentUser as keyof typeof TEACHER_ACCESS] || [];
-    
-    const subjectMap = new Map<string, Map<string, Map<string, UserGroup>>>();
-    let classworkCount = 0;
-    let homeworkCount = 0;
-    const oneWeekAgo = new Date();
-    oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-    let recentCount = 0;
-    const subjectStats: Record<string, number> = {};
-
-    snapshot.docs.forEach((docSnap: any, index: number) => {
-      const data = docSnap.data();
-      console.log(`[DEBUG] Processing submission ${index + 1}:`, {
-        id: docSnap.id,
-        userId: data.userId,
-        userName: data.userName,
-        title: data.title,
-        type: data.type,
-        language: data.language
-      });
-
-      const submittedAt = data.submittedAt?.toDate ? data.submittedAt.toDate() : 
-                         data.submittedAt ? new Date(data.submittedAt) : new Date();
-      
-      const sub: Submission = {
-        id: docSnap.id,
-        userId: data.userId || "unknown",
-        userName: data.userName || "Unknown User",
-        userEmail: data.userEmail || "unknown@email.com",
-        title: data.title || "Untitled",
-        description: data.description,
-        code: data.code || "",
-        language: data.language || "DA", // Default to DA if no language specified
-        type: data.type || "classwork",
-        status: data.status || "submitted",
-        submittedAt,
-      };
-
-      // Filter by user's allowed subjects
-      if (allowedSubjects.length > 0 && !allowedSubjects.includes(sub.language)) {
-        return; // Skip this submission if user doesn't have access
-      }
-
-      // Count submissions by type
-      if (sub.type === "classwork") classworkCount++;
-      else homeworkCount++;
-
-      // Count recent submissions
-      if (submittedAt && submittedAt > oneWeekAgo) recentCount++;
-
-      // Count by subject
-      subjectStats[sub.language] = (subjectStats[sub.language] || 0) + 1;
-
-      // Create date key (YYYY-MM-DD)
-      const dateKey = submittedAt.toISOString().split('T')[0];
-      
-      // Initialize subject map if doesn't exist
-      if (!subjectMap.has(sub.language)) {
-        subjectMap.set(sub.language, new Map<string, Map<string, UserGroup>>());
-      }
-      
-      // Initialize date map if doesn't exist
-      const subjectData = subjectMap.get(sub.language)!;
-      if (!subjectData.has(dateKey)) {
-        subjectData.set(dateKey, new Map<string, UserGroup>());
-      }
-      
-      // Initialize user group if doesn't exist
-      const dateData = subjectData.get(dateKey)!;
-      if (!dateData.has(sub.userId)) {
-        dateData.set(sub.userId, {
-          userId: sub.userId,
-          userName: sub.userName,
-          userEmail: sub.userEmail,
-          submissions: [sub],
-          totalSubmissions: 1,
-          latestSubmission: submittedAt,
-        });
-      } else {
-        const group = dateData.get(sub.userId)!;
-        group.submissions.push(sub);
-        group.totalSubmissions++;
-        if (!group.latestSubmission || submittedAt > group.latestSubmission) {
-          group.latestSubmission = submittedAt;
-        }
-      }
-    });
-
-    // Convert maps to arrays and sort
-    const subjectGroupsArray: SubjectGroup[] = [];
-    
-    subjectMap.forEach((dateMap, subject) => {
-      const dailyGroups: DailyGroup[] = [];
-      let subjectTotalSubmissions = 0;
-      const uniqueStudents = new Set<string>();
-      
-      // Sort dates in descending order (most recent first)
-      const sortedDates = Array.from(dateMap.keys()).sort((a, b) => b.localeCompare(a));
-      
-      sortedDates.forEach(dateKey => {
-        const userMap = dateMap.get(dateKey)!;
-        const userGroups: UserGroup[] = [];
-        let dayTotalSubmissions = 0;
-        
-        userMap.forEach((group) => {
-          // Sort submissions within each group
-          group.submissions.sort((a, b) => {
-            const aTime = a.submittedAt?.getTime() ?? 0;
-            const bTime = b.submittedAt?.getTime() ?? 0;
-            return bTime - aTime; // Most recent first
-          });
-          
-          userGroups.push(group);
-          dayTotalSubmissions += group.totalSubmissions;
-          subjectTotalSubmissions += group.totalSubmissions;
-          uniqueStudents.add(group.userId);
-        });
-        
-        // Sort user groups by name
-        userGroups.sort((a, b) => a.userName.localeCompare(b.userName));
-        
-        // Format display date
-        const date = new Date(dateKey);
-        const displayDate = date.toLocaleDateString("en-US", {
-          weekday: "long",
-          year: "numeric",
-          month: "long",
-          day: "numeric",
-        });
-        
-        dailyGroups.push({
-          date: dateKey,
-          displayDate,
-          userGroups,
-          totalSubmissions: dayTotalSubmissions,
-        });
-      });
-      
-      subjectGroupsArray.push({
-        subject,
-        displayName: SUBJECT_NAMES[subject as keyof typeof SUBJECT_NAMES] || subject,
-        dailyGroups,
-        totalSubmissions: subjectTotalSubmissions,
-        totalStudents: uniqueStudents.size,
-      });
-    });
-
-    // Sort subjects alphabetically
-    subjectGroupsArray.sort((a, b) => a.displayName.localeCompare(b.displayName));
-
-    console.log("[DEBUG] Final processed subject groups:", subjectGroupsArray.length);
-    console.log("[DEBUG] Subject groups data:", subjectGroupsArray.map(sg => ({ 
-      subject: sg.subject,
-      displayName: sg.displayName,
-      dailyGroups: sg.dailyGroups.length,
-      totalSubmissions: sg.totalSubmissions,
-      totalStudents: sg.totalStudents
-    })));
-
-    setSubjectGroups(subjectGroupsArray);
-    
-    // Calculate total unique students across all subjects
-    const allUniqueStudents = new Set<string>();
-    subjectGroupsArray.forEach(sg => {
-      sg.dailyGroups.forEach(dg => {
-        dg.userGroups.forEach(ug => {
-          allUniqueStudents.add(ug.userId);
-        });
-      });
-    });
-
-    setStats({
-      totalStudents: allUniqueStudents.size,
-      totalSubmissions: snapshot.size,
-      classworkCount,
-      homeworkCount,
-      recentSubmissions: recentCount,
-      subjectStats,
-    });
-  };
-
-  const handleLogin = () => {
-    // Check all possible teacher credentials
-    const teachers = {
-      "pushkar_shinde": "v2v@pushkar141", // Admin
-      "da_teacher": "da123", // Data Analysis teacher
-      "mad_teacher": "mad123", // Mobile App Development teacher
-      "webd_teacher": "webd123", // Web Development teacher
-    };
-
-    const foundTeacher = Object.entries(teachers).find(
-      ([id, pass]) => userInput.id === id && userInput.pass === pass
-    );
-
-    if (foundTeacher) {
-      setCurrentUser(foundTeacher[0]);
-      setLoggedIn(true);
-    } else {
-      alert("Invalid credentials");
+  useEffect(() => {
+    if (isLoggedIn) {
+      loadSubmissions();
     }
+  }, [isLoggedIn]);
+
+  useEffect(() => {
+    let filtered = allSubmissions;
+
+    // Apply filters
+    if (collegeFilter) {
+      filtered = filtered.filter(sub => sub.userCollege === collegeFilter);
+    }
+    if (courseFilter) {
+      filtered = filtered.filter(sub => sub.userCourse === courseFilter);
+    }
+    if (typeFilter) {
+      filtered = filtered.filter(sub => sub.type === typeFilter);
+    }
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(sub => 
+        sub.userName?.toLowerCase().includes(query) ||
+        sub.userEmail?.toLowerCase().includes(query) ||
+        sub.title?.toLowerCase().includes(query)
+      );
+    }
+    if (dateRange.start && dateRange.end) {
+      const startDate = new Date(dateRange.start);
+      const endDate = new Date(dateRange.end);
+      filtered = filtered.filter(sub => {
+        if (sub.createdAt?.seconds) {
+          const subDate = new Date(sub.createdAt.seconds * 1000);
+          return subDate >= startDate && subDate <= endDate;
+        }
+        return false;
+      });
+    }
+
+    setFilteredSubmissions(filtered);
+    processSubmissionsData(filtered);
+  }, [collegeFilter, courseFilter, typeFilter, searchQuery, dateRange, allSubmissions]);
+
+  const toggleDayExpansion = (date: string) => {
+    const newExpanded = new Set(expandedDays);
+    if (newExpanded.has(date)) {
+      newExpanded.delete(date);
+    } else {
+      newExpanded.add(date);
+    }
+    setExpandedDays(newExpanded);
   };
 
-  const toggleSubject = (subject: string) => {
-    const newSet = new Set(expandedSubjects);
-    newSet.has(subject) ? newSet.delete(subject) : newSet.add(subject);
-    setExpandedSubjects(newSet);
+  const exportToCSV = () => {
+    const headers = ['Date', 'Name', 'Email', 'College', 'Course', 'Type', 'Title', 'File URL'];
+    const csvData = filteredSubmissions.map(sub => [
+      sub.createdAt ? new Date(sub.createdAt.seconds * 1000).toLocaleDateString() : 'N/A',
+      sub.userName || 'N/A',
+      sub.userEmail || 'N/A',
+      sub.userCollege || 'N/A',
+      sub.userCourse || 'N/A',
+      sub.type || 'N/A',
+      sub.title || 'N/A',
+      sub.fileUrl || 'N/A'
+    ]);
+
+    const csvContent = [headers, ...csvData]
+      .map(row => row.map(cell => `"${cell}"`).join(','))
+      .join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `submissions_${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
-  const toggleDay = (key: string) => {
-    const newSet = new Set(expandedDays);
-    newSet.has(key) ? newSet.delete(key) : newSet.add(key);
-    setExpandedDays(newSet);
-  };
-
-  const toggleUser = (uid: string) => {
-    const newSet = new Set(expandedUsers);
-    newSet.has(uid) ? newSet.delete(uid) : newSet.add(uid);
-    setExpandedUsers(newSet);
-  };
-
-  // Filter subject groups based on search term and selected filters
-  const filteredSubjectGroups = subjectGroups
-    .filter(sg => selectedSubject === "all" || sg.subject === selectedSubject)
-    .map(sg => ({
-      ...sg,
-      dailyGroups: sg.dailyGroups
-        .filter(dg => {
-          if (selectedDateRange === "all") return true;
-          const date = new Date(dg.date);
-          const now = new Date();
-          const daysDiff = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
-          
-          switch (selectedDateRange) {
-            case "today": return daysDiff === 0;
-            case "week": return daysDiff <= 7;
-            case "month": return daysDiff <= 30;
-            default: return true;
-          }
-        })
-        .map(dg => ({
-          ...dg,
-          userGroups: dg.userGroups.filter(ug =>
-            ug.userName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            ug.userEmail.toLowerCase().includes(searchTerm.toLowerCase())
-          )
-        }))
-        .filter(dg => dg.userGroups.length > 0)
-    }))
-    .filter(sg => sg.dailyGroups.length > 0);
-
-  const formatDate = (date: Date | undefined) => {
-    if (!date) return "No date";
-    return date.toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  };
-
-  const getLanguageColor = (language: string) => {
-    const colors: Record<string, string> = {
-      "DA": "bg-blue-100 text-blue-800 border-blue-200",
-      "MAD": "bg-green-100 text-green-800 border-green-200",
-      "WebD": "bg-purple-100 text-purple-800 border-purple-200",
-      default: "bg-gray-100 text-gray-800"
-    };
-    return colors[language] || colors.default;
-  };
-
-  const getSubjectColor = (subject: string) => {
-    const colors: Record<string, string> = {
-      "DA": "from-blue-500 to-blue-600",
-      "MAD": "from-green-500 to-green-600",
-      "WebD": "from-purple-500 to-purple-600",
-    };
-    return colors[subject] || "from-gray-500 to-gray-600";
-  };
-
-  if (!loggedIn) {
+  if (!isLoggedIn) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-indigo-100 via-white to-blue-100">
-        <Card className="w-full max-w-md p-8 shadow-lg">
-          <CardHeader>
-            <CardTitle className="text-xl">Teacher Login</CardTitle>
-            <CardDescription>Enter credentials to access your dashboard</CardDescription>
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
+        <Card className="w-full max-w-md shadow-2xl border-0">
+          <CardHeader className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-t-lg">
+            <CardTitle className="text-center text-2xl font-bold flex items-center justify-center gap-2">
+              🔐 Admin Portal
+            </CardTitle>
           </CardHeader>
-          <div className="space-y-4 px-6 pb-6">
-            <Input
-              placeholder="Teacher ID"
-              value={userInput.id}
-              onChange={(e) => setUserInput({ ...userInput, id: e.target.value })}
-            />
-            <Input
-              type="password"
-              placeholder="Password"
-              value={userInput.pass}
-              onChange={(e) => setUserInput({ ...userInput, pass: e.target.value })}
-            />
-            <Button className="w-full" onClick={handleLogin}>
-              Login
-            </Button>
-            <div className="text-xs text-gray-500 space-y-1">
-              <p>Demo credentials:</p>
-              <p>• Admin: pushkar_shinde / v2v@pushkar141</p>
-              <p>• DA Teacher: da_teacher / da123</p>
-              <p>• MAD Teacher: mad_teacher / mad123</p>
-              <p>• WebD Teacher: webd_teacher / webd123</p>
+          <CardContent className="p-8 space-y-6">
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Username</label>
+                <Input 
+                  placeholder="Enter username" 
+                  value={username} 
+                  onChange={e => setUsername(e.target.value)}
+                  className="border-2 focus:border-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Password</label>
+                <Input 
+                  type="password" 
+                  placeholder="Enter password" 
+                  value={password} 
+                  onChange={e => setPassword(e.target.value)}
+                  className="border-2 focus:border-blue-500"
+                  onKeyPress={e => e.key === 'Enter' && handleLogin()}
+                />
+              </div>
             </div>
-          </div>
+            <Button 
+              onClick={handleLogin} 
+              className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold py-3"
+            >
+              🚀 Access Dashboard
+            </Button>
+            <p className="text-xs text-gray-500 text-center">
+              Demo: admin / admin123
+            </p>
+          </CardContent>
         </Card>
       </div>
     );
   }
 
-  const allowedSubjects = TEACHER_ACCESS[currentUser as keyof typeof TEACHER_ACCESS] || [];
-  const isAdmin = currentUser === "pushkar_shinde";
+  const totalSubmissions = filteredSubmissions.length;
+  const totalStudents = new Set(filteredSubmissions.map(s => s.userEmail)).size;
+  const totalColleges = new Set(filteredSubmissions.map(s => s.userCollege)).size;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
+    <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <div className="bg-white/80 backdrop-blur-sm border-b border-gray-200 sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg flex items-center justify-center">
-                <BookOpen className="w-6 h-6 text-white" />
-              </div>
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900">
-                  {isAdmin ? "Admin Dashboard" : `${currentUser.toUpperCase()} Dashboard`}
-                </h1>
-                <p className="text-sm text-gray-600">
-                  {isAdmin ? "All Subjects Management" : `${allowedSubjects.join(", ")} Submissions`}
-                </p>
+      <div className="bg-white shadow-sm border-b sticky top-0 z-10">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center h-16">
+            <div className="flex items-center space-x-4">
+              <h1 className="text-2xl font-bold text-gray-900">📊 Admin Dashboard</h1>
+              <div className="hidden sm:flex space-x-2">
+                <Button
+                  variant={activeView === 'daily' ? 'default' : 'outline'}
+                  onClick={() => setActiveView('daily')}
+                  size="sm"
+                >
+                  <Calendar className="w-4 h-4 mr-1" />
+                  Daily View
+                </Button>
+                <Button
+                  variant={activeView === 'overview' ? 'default' : 'outline'}
+                  onClick={() => setActiveView('overview')}
+                  size="sm"
+                >
+                  <FileText className="w-4 h-4 mr-1" />
+                  Overview
+                </Button>
+                <Button
+                  variant={activeView === 'analytics' ? 'default' : 'outline'}
+                  onClick={() => setActiveView('analytics')}
+                  size="sm"
+                >
+                  <BarChart3 className="w-4 h-4 mr-1" />
+                  Analytics
+                </Button>
               </div>
             </div>
-            <Button
-              onClick={fetchAndGroupSubmissions}
-              variant="outline"
-              size="sm"
-              disabled={loading}
-              className="flex items-center gap-2"
-            >
-              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-              Refresh
-            </Button>
+            <div className="flex items-center space-x-4">
+              <Button
+                variant="outline"
+                onClick={loadSubmissions}
+                disabled={loading}
+                size="sm"
+              >
+                <RefreshCw className={`w-4 h-4 mr-1 ${loading ? 'animate-spin' : ''}`} />
+                Refresh
+              </Button>
+              <Button
+                variant="outline"
+                onClick={exportToCSV}
+                size="sm"
+              >
+                <Download className="w-4 h-4 mr-1" />
+                Export
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => setIsLoggedIn(false)}
+                size="sm"
+              >
+                <LogOut className="w-4 h-4 mr-1" />
+                Logout
+              </Button>
+            </div>
           </div>
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto p-6 space-y-6">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card className="bg-gradient-to-r from-blue-500 to-blue-600 text-white border-0">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+          <Card className="bg-gradient-to-r from-blue-500 to-blue-600 text-white">
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-blue-100 text-sm font-medium">Total Students</p>
-                  <p className="text-3xl font-bold">{stats.totalStudents}</p>
+                  <p className="text-blue-100 text-sm font-medium">Total Submissions</p>
+                  <p className="text-3xl font-bold">{totalSubmissions}</p>
                 </div>
-                <Users className="w-8 h-8 text-blue-200" />
+                <FileText className="w-8 h-8 text-blue-200" />
               </div>
             </CardContent>
           </Card>
 
-          <Card className="bg-gradient-to-r from-green-500 to-green-600 text-white border-0">
+          <Card className="bg-gradient-to-r from-green-500 to-green-600 text-white">
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-green-100 text-sm font-medium">Total Submissions</p>
-                  <p className="text-3xl font-bold">{stats.totalSubmissions}</p>
+                  <p className="text-green-100 text-sm font-medium">Active Students</p>
+                  <p className="text-3xl font-bold">{totalStudents}</p>
                 </div>
-                <FileText className="w-8 h-8 text-green-200" />
+                <Users className="w-8 h-8 text-green-200" />
               </div>
             </CardContent>
           </Card>
 
-          <Card className="bg-gradient-to-r from-purple-500 to-purple-600 text-white border-0">
+          <Card className="bg-gradient-to-r from-purple-500 to-purple-600 text-white">
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-purple-100 text-sm font-medium">Classwork</p>
-                  <p className="text-3xl font-bold">{stats.classworkCount}</p>
+                  <p className="text-purple-100 text-sm font-medium">Colleges</p>
+                  <p className="text-3xl font-bold">{totalColleges}</p>
                 </div>
-                <Code className="w-8 h-8 text-purple-200" />
+                <TrendingUp className="w-8 h-8 text-purple-200" />
               </div>
             </CardContent>
           </Card>
 
-          <Card className="bg-gradient-to-r from-orange-500 to-orange-600 text-white border-0">
+          <Card className="bg-gradient-to-r from-orange-500 to-orange-600 text-white">
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-orange-100 text-sm font-medium">Recent (7 days)</p>
-                  <p className="text-3xl font-bold">{stats.recentSubmissions}</p>
+                  <p className="text-orange-100 text-sm font-medium">Days Tracked</p>
+                  <p className="text-3xl font-bold">{dayWiseData.length}</p>
                 </div>
                 <Calendar className="w-8 h-8 text-orange-200" />
               </div>
@@ -587,341 +384,585 @@ const AdminDashboard = () => {
           </Card>
         </div>
 
-        {/* Subject Stats */}
-        {Object.keys(stats.subjectStats).length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {Object.entries(stats.subjectStats).map(([subject, count]) => (
-              <Card key={subject} className={`bg-gradient-to-r ${getSubjectColor(subject)} text-white border-0`}>
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-white/80 text-sm font-medium">
-                        {SUBJECT_NAMES[subject as keyof typeof SUBJECT_NAMES]}
-                      </p>
-                      <p className="text-2xl font-bold">{count}</p>
-                    </div>
-                    <BookOpen className="w-6 h-6 text-white/60" />
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        )}
+        {/* Filters */}
+        <Card className="mb-8">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Filter className="w-5 h-5" />
+              Filters & Search
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+              <div className="relative">
+                <Search className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
+                <Input
+                  placeholder="Search by name, email, or title..."
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
 
-        {error && (
-          <Alert className="border-red-200 bg-red-50">
-            <AlertCircle className="h-4 w-4 text-red-600" />
-            <AlertDescription className="text-red-700 whitespace-pre-line">{error}</AlertDescription>
-          </Alert>
-        )}
+              <select
+                value={collegeFilter}
+                onChange={e => setCollegeFilter(e.target.value)}
+                className="border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">All Colleges</option>
+                {COLLEGES.map(college => (
+                  <option key={college} value={college}>{college}</option>
+                ))}
+              </select>
 
-        {/* Search and Filters */}
-        <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-lg">
-          <CardContent className="p-6">
-            <div className="flex flex-col lg:flex-row gap-4 items-center">
-              <Input
-                placeholder="Search students by name or email..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="flex-1 h-11"
-              />
-              
-              {isAdmin && (
-                <Select value={selectedSubject} onValueChange={setSelectedSubject}>
-                  <SelectTrigger className="w-48">
-                    <SelectValue placeholder="Filter by subject" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Subjects</SelectItem>
-                    {Object.entries(SUBJECT_NAMES).map(([key, name]) => (
-                      <SelectItem key={key} value={key}>{name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-              
-              <Select value={selectedDateRange} onValueChange={setSelectedDateRange}>
-                <SelectTrigger className="w-48">
-                  <SelectValue placeholder="Filter by date" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Dates</SelectItem>
-                  <SelectItem value="today">Today</SelectItem>
-                  <SelectItem value="week">Last 7 Days</SelectItem>
-                  <SelectItem value="month">Last 30 Days</SelectItem>
-                </SelectContent>
-              </Select>
+              <select
+                value={courseFilter}
+                onChange={e => setCourseFilter(e.target.value)}
+                className="border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">All Courses</option>
+                {COURSES.map(course => (
+                  <option key={course} value={course}>{course}</option>
+                ))}
+              </select>
+
+              <select
+                value={typeFilter}
+                onChange={e => setTypeFilter(e.target.value)}
+                className="border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">All Types</option>
+                <option value="homework">Homework</option>
+                <option value="classwork">Classwork</option>
+              </select>
             </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
+                <Input
+                  type="date"
+                  value={dateRange.start}
+                  onChange={e => setDateRange(prev => ({ ...prev, start: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
+                <Input
+                  type="date"
+                  value={dateRange.end}
+                  onChange={e => setDateRange(prev => ({ ...prev, end: e.target.value }))}
+                />
+              </div>
+            </div>
+
+            {(collegeFilter || courseFilter || typeFilter || searchQuery || dateRange.start || dateRange.end) && (
+              <div className="mt-4 pt-4 border-t">
+                <div className="flex flex-wrap gap-2">
+                  {collegeFilter && (
+                    <span className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm flex items-center gap-1">
+                      College: {collegeFilter}
+                      <button onClick={() => setCollegeFilter('')} className="text-blue-600 hover:text-blue-800">×</button>
+                    </span>
+                  )}
+                  {courseFilter && (
+                    <span className="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm flex items-center gap-1">
+                      Course: {courseFilter}
+                      <button onClick={() => setCourseFilter('')} className="text-green-600 hover:text-green-800">×</button>
+                    </span>
+                  )}
+                  {typeFilter && (
+                    <span className="bg-purple-100 text-purple-800 px-3 py-1 rounded-full text-sm flex items-center gap-1">
+                      Type: {typeFilter}
+                      <button onClick={() => setTypeFilter('')} className="text-purple-600 hover:text-purple-800">×</button>
+                    </span>
+                  )}
+                  {searchQuery && (
+                    <span className="bg-orange-100 text-orange-800 px-3 py-1 rounded-full text-sm flex items-center gap-1">
+                      Search: {searchQuery}
+                      <button onClick={() => setSearchQuery('')} className="text-orange-600 hover:text-orange-800">×</button>
+                    </span>
+                  )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setCollegeFilter('');
+                      setCourseFilter('');
+                      setTypeFilter('');
+                      setSearchQuery('');
+                      setDateRange({ start: '', end: '' });
+                    }}
+                  >
+                    Clear All
+                  </Button>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
 
-        {/* Subject Sections */}
-        <div className="space-y-6">
-          {loading ? (
-            <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-lg">
-              <CardContent className="p-12">
-                <div className="text-center">
-                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-                  <p className="text-gray-600">Loading submissions...</p>
-                </div>
-              </CardContent>
-            </Card>
-          ) : filteredSubjectGroups.length === 0 ? (
-            <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-lg">
-              <CardContent className="p-12">
-                <div className="text-center">
+        {/* Daily View */}
+        {activeView === 'daily' && (
+          <div className="space-y-6">
+            {dayWiseData.length === 0 ? (
+              <Card>
+                <CardContent className="p-12 text-center">
                   <FileText className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                  <p className="text-xl text-gray-500">No submissions found</p>
-                  <p className="text-gray-400">Try adjusting your filters or check console for debug information</p>
-                </div>
-              </CardContent>
-            </Card>
-          ) : (
-            filteredSubjectGroups.map((subjectGroup) => (
-              <Card key={subjectGroup.subject} className="bg-white/80 backdrop-blur-sm border-0 shadow-lg">
-                <Collapsible>
-                  <CollapsibleTrigger
-                    onClick={() => toggleSubject(subjectGroup.subject)}
-                    className="w-full"
-                  >
-                    <CardHeader className="hover:bg-gray-50 transition-colors cursor-pointer">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-4">
-                          <div className={`w-12 h-12 bg-gradient-to-r ${getSubjectColor(subjectGroup.subject)} rounded-lg flex items-center justify-center`}>
-                            <BookOpen className="w-6 h-6 text-white" />
-                          </div>
-                          <div className="text-left">
-                            <CardTitle className="text-xl">{subjectGroup.displayName}</CardTitle>
-                            <CardDescription className="flex items-center gap-4">
-                              <span className="flex items-center gap-1">
-                                <Users className="w-4 h-4" />
-                                {subjectGroup.totalStudents} students
-                              </span>
-                              <span className="flex items-center gap-1">
-                                <FileText className="w-4 h-4" />
-                                {subjectGroup.totalSubmissions} submissions
-                              </span>
-                              <span className="flex items-center gap-1">
-                                <Calendar className="w-4 h-4" />
-                                {subjectGroup.dailyGroups.length} days
-                              </span>
-                            </CardDescription>
-                          </div>
-                        </div>
-                        <svg
-                          className={`h-5 w-5 text-gray-400 transform transition-transform duration-200 ${
-                            expandedSubjects.has(subjectGroup.subject) ? "rotate-180" : ""
-                          }`}
-                          xmlns="http://www.w3.org/2000/svg"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                        >
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                        </svg>
-                      </div>
-                    </CardHeader>
-                  </CollapsibleTrigger>
-
-                  <CollapsibleContent>
-                    <CardContent className="space-y-4">
-                      {subjectGroup.dailyGroups.map((dailyGroup) => (
-                        <Card key={`${subjectGroup.subject}-${dailyGroup.date}`} className="bg-gray-50/50 border-gray-200">
-                          <Collapsible>
-                            <CollapsibleTrigger
-                              onClick={() => toggleDay(`${subjectGroup.subject}-${dailyGroup.date}`)}
-                              className="w-full"
-                            >
-                              <CardHeader className="hover:bg-gray-100/50 transition-colors cursor-pointer">
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center gap-3">
-                                    <div className="w-10 h-10 bg-gradient-to-r from-gray-500 to-gray-600 rounded-lg flex items-center justify-center">
-                                      <Clock className="w-5 h-5 text-white" />
-                                    </div>
-                                    <div className="text-left">
-                                      <CardTitle className="text-lg">{dailyGroup.displayDate}</CardTitle>
-                                      <CardDescription className="flex items-center gap-3">
-                                        <span className="flex items-center gap-1">
-                                          <Users className="w-4 h-4" />
-                                          {dailyGroup.userGroups.length} students
-                                        </span>
-                                        <span className="flex items-center gap-1">
-                                          <FileText className="w-4 h-4" />
-                                          {dailyGroup.totalSubmissions} submissions
-                                        </span>
-                                      </CardDescription>
-                                    </div>
-                                  </div>
-                                  <svg
-                                    className={`h-4 w-4 text-gray-400 transform transition-transform duration-200 ${
-                                      expandedDays.has(`${subjectGroup.subject}-${dailyGroup.date}`) ? "rotate-180" : ""
-                                    }`}
-                                    xmlns="http://www.w3.org/2000/svg"
-                                    fill="none"
-                                    viewBox="0 0 24 24"
-                                    stroke="currentColor"
-                                  >
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                  </svg>
-                                </div>
-                              </CardHeader>
-                            </CollapsibleTrigger>
-
-                            <CollapsibleContent>
-                              <CardContent className="space-y-3">
-                                {dailyGroup.userGroups.map((group) => (
-                                  <Card key={`${subjectGroup.subject}-${dailyGroup.date}-${group.userId}`} className="bg-white border-gray-200 hover:shadow-md transition-all duration-200">
-                                    <Collapsible>
-                                      <CollapsibleTrigger
-                                        onClick={() => toggleUser(`${subjectGroup.subject}-${dailyGroup.date}-${group.userId}`)}
-                                        className="w-full px-4 py-3 flex justify-between items-center hover:bg-gray-50 transition-colors"
-                                      >
-                                        <div className="text-left flex-1">
-                                          <div className="flex items-center gap-3 mb-1">
-                                            <div className={`w-8 h-8 bg-gradient-to-r ${getSubjectColor(subjectGroup.subject)} rounded-full flex items-center justify-center text-white font-semibold text-sm`}>
-                                              {group.userName.charAt(0).toUpperCase()}
-                                            </div>
-                                            <div>
-                                              <h4 className="font-semibold text-gray-900 flex items-center gap-3">
-                                                <span>{group.userName}</span>
-
-                                                <div className="flex items-center gap-1">
-                                                  {group.submissions.some(sub => sub.type === "classwork") && (
-                                                    <span
-                                                      title="Classwork submitted"
-                                                      className="text-blue-600 bg-blue-100 rounded-full p-1"
-                                                    >
-                                                      <Code className="w-4 h-4" />
-                                                    </span>
-                                                  )}
-                                                  {group.submissions.some(sub => sub.type === "homework") && (
-                                                    <span
-                                                      title="Homework submitted"
-                                                      className="text-purple-600 bg-purple-100 rounded-full p-1"
-                                                    >
-                                                      <BookOpen className="w-4 h-4" />
-                                                    </span>
-                                                  )}
-                                                </div>
-                                              </h4>
-
-
-                                              <p className="text-xs text-gray-600">{group.userEmail}</p>
-                                            </div>
-                                          </div>
-                                          <div className="flex items-center gap-3 text-xs text-gray-500 ml-11">
-                                            <span className="flex items-center gap-1">
-                                              <FileText className="w-3 h-3" />
-                                              {group.totalSubmissions} submission{group.totalSubmissions !== 1 ? 's' : ''}
-                                            </span>
-                                            <span className="flex items-center gap-1">
-                                              <Clock className="w-3 h-3" />
-                                              Latest: {formatDate(group.latestSubmission)}
-                                            </span>
-                                          </div>
-                                        </div>
-                                        <svg
-                                          className={`h-4 w-4 text-gray-400 transform transition-transform duration-200 ${
-                                            expandedUsers.has(`${subjectGroup.subject}-${dailyGroup.date}-${group.userId}`) ? "rotate-180" : ""
-                                          }`}
-                                          xmlns="http://www.w3.org/2000/svg"
-                                          fill="none"
-                                          viewBox="0 0 24 24"
-                                          stroke="currentColor"
-                                        >
-                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                        </svg>
-                                      </CollapsibleTrigger>
-
-                                      <CollapsibleContent className="px-4 pb-4">
-                                        <div className="border-t pt-3 space-y-3">
-                                          {group.submissions.map((sub) => (
-                                            <Card key={sub.id} className="bg-gray-50/50 border-gray-200 hover:bg-gray-50 transition-colors">
-                                              <CardContent className="p-4">
-                                                <div className="flex justify-between items-start mb-3">
-                                                  <div className="flex-1">
-                                                    <h5 className="font-semibold text-gray-900 mb-1">{sub.title}</h5>
-                                                    <p className="text-xs text-gray-600">{formatDate(sub.submittedAt)}</p>
-                                                  </div>
-                                                  <div className="flex flex-wrap gap-1">
-                                                    <Badge className={getLanguageColor(sub.language)} size="sm">
-                                                      {sub.language}
-                                                    </Badge>
-                                                    <Badge
-                                                      className={
-                                                        sub.type === "classwork"
-                                                          ? "bg-blue-100 text-blue-800 border-blue-200"
-                                                          : "bg-purple-100 text-purple-800 border-purple-200"
-                                                      }
-                                                      size="sm"
-                                                    >
-                                                      {sub.type === "classwork" ? "Classwork" : "Homework"}
-                                                    </Badge>
-                                                    <Badge className="bg-green-100 text-green-800 border-green-200" size="sm">
-                                                      {sub.status}
-                                                    </Badge>
-                                                  </div>
-                                                </div>
-
-                                                {sub.description && (
-                                                  <div className="mb-3">
-                                                    <p className="text-xs text-gray-700 bg-blue-50 p-2 rounded border border-blue-100">
-                                                      {sub.description}
-                                                    </p>
-                                                  </div>
-                                                )}
-
-                                                <div className="bg-gray-900 rounded-lg overflow-hidden">
-                                                  <div className="flex items-center justify-between px-3 py-2 bg-gray-800">
-                                                    <span className="text-xs text-gray-300 font-medium">
-                                                      {sub.language} CODE
-                                                    </span>
-                                                    <span className="text-xs text-gray-400">
-                                                      {sub.code.split('\n').length} lines
-                                                    </span>
-                                                  </div>
-                                                  <pre className="text-white p-3 overflow-x-auto text-xs leading-relaxed max-h-64 overflow-y-auto">
-                                                    <code>{sub.code}</code>
-                                                  </pre>
-                                                </div>
-                                              </CardContent>
-                                            </Card>
-                                          ))}
-                                        </div>
-                                      </CollapsibleContent>
-                                    </Collapsible>
-                                  </Card>
-                                ))}
-                              </CardContent>
-                            </CollapsibleContent>
-                          </Collapsible>
-                        </Card>
-                      ))}
-                    </CardContent>
-                  </CollapsibleContent>
-                </Collapsible>
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">No submissions found</h3>
+                  <p className="text-gray-500">Try adjusting your filters or check back later.</p>
+                </CardContent>
               </Card>
-            ))
-          )}
-        </div>
+            ) : (
+              dayWiseData.map((dayData) => (
+                <Card key={dayData.date} className="overflow-hidden">
+                  <CardHeader 
+                    className="cursor-pointer hover:bg-gray-50 transition-colors"
+                    onClick={() => toggleDayExpansion(dayData.date)}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-4">
+                        <div className="flex items-center space-x-2">
+                          <Calendar className="w-5 h-5 text-blue-600" />
+                          <CardTitle className="text-lg">{dayData.date}</CardTitle>
+                        </div>
+                        <div className="flex items-center space-x-4 text-sm text-gray-600">
+                          <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded-full">
+                            {dayData.totalCount} submissions
+                          </span>
+                          <span className="bg-green-100 text-green-800 px-2 py-1 rounded-full">
+                            {Object.keys(dayData.collegeBreakdown).length} colleges
+                          </span>
+                        </div>
+                      </div>
+                      <Button variant="ghost" size="sm">
+                        {expandedDays.has(dayData.date) ? '▼' : '►'}
+                      </Button>
+                    </div>
 
-        {/* Debug Info */}
-        {loggedIn && (
-          <Card className="bg-yellow-50 border-yellow-200">
-            <CardContent className="p-4">
-              <h3 className="font-semibold text-yellow-800 mb-2">Debug Information:</h3>
-              <div className="text-sm text-yellow-700 space-y-1">
-                <p>• Current User: {currentUser}</p>
-                <p>• Allowed Subjects: {allowedSubjects.join(", ")}</p>
-                <p>• Total Subject Groups: {subjectGroups.length}</p>
-                <p>• Filtered Subject Groups: {filteredSubjectGroups.length}</p>
-                <p>• Total Submissions: {stats.totalSubmissions}</p>
-                <p>• Check browser console for detailed logs</p>
+                    {/* Day Summary */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+                      <div className="bg-blue-50 p-3 rounded-lg">
+                        <h4 className="font-medium text-blue-900 mb-2">Top Colleges</h4>
+                        <div className="space-y-1">
+                          {Object.entries(dayData.collegeBreakdown)
+                            .sort(([,a], [,b]) => b - a)
+                            .slice(0, 3)
+                            .map(([college, count]) => (
+                              <div key={college} className="flex justify-between text-sm">
+                                <span className="text-blue-700 truncate">{college}</span>
+                                <span className="text-blue-900 font-medium">{count}</span>
+                              </div>
+                            ))}
+                        </div>
+                      </div>
+
+                      <div className="bg-green-50 p-3 rounded-lg">
+                        <h4 className="font-medium text-green-900 mb-2">Courses</h4>
+                        <div className="space-y-1">
+                          {Object.entries(dayData.courseBreakdown)
+                            .sort(([,a], [,b]) => b - a)
+                            .map(([course, count]) => (
+                              <div key={course} className="flex justify-between text-sm">
+                                <span className="text-green-700 truncate">{course}</span>
+                                <span className="text-green-900 font-medium">{count}</span>
+                              </div>
+                            ))}
+                        </div>
+                      </div>
+
+                      <div className="bg-purple-50 p-3 rounded-lg">
+                        <h4 className="font-medium text-purple-900 mb-2">Types</h4>
+                        <div className="space-y-1">
+                          {Object.entries(dayData.typeBreakdown)
+                            .sort(([,a], [,b]) => b - a)
+                            .map(([type, count]) => (
+                              <div key={type} className="flex justify-between text-sm">
+                                <span className="text-purple-700 capitalize">{type}</span>
+                                <span className="text-purple-900 font-medium">{count}</span>
+                              </div>
+                            ))}
+                        </div>
+                      </div>
+                    </div>
+                  </CardHeader>
+
+                  {expandedDays.has(dayData.date) && (
+  <CardContent className="border-t bg-gray-50">
+    <div className="space-y-4">
+      {Object.entries(dayData.studentSubmissions).map(([email, submissions]) => (
+        <div key={email} className="bg-white p-4 rounded-lg border shadow-sm">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-3">
+            <div>
+              <p className="text-sm font-medium text-gray-900">
+                {submissions[0].userName || 'N/A'}
+              </p>
+              <p className="text-sm text-gray-600 truncate">{email}</p>
+            </div>
+            <div>
+              <p className="text-sm text-gray-700">
+                {submissions[0].userCollege || 'N/A'}
+              </p>
+              <p className="text-sm text-gray-600">
+                {submissions[0].userCourse || 'N/A'}
+              </p>
+            </div>
+            <div className="flex items-center justify-end">
+              <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs">
+                {submissions.length} {submissions.length === 1 ? 'submission' : 'submissions'}
+              </span>
+            </div>
+          </div>
+
+          <div className="border-t pt-3 space-y-3">
+            {submissions.map((submission) => (
+              <div key={submission.id} className="grid grid-cols-1 md:grid-cols-4 gap-4 items-center">
+                <div>
+                  <span className={`inline-flex px-2 py-1 text-xs rounded-full ${
+                    submission.type === 'homework' 
+                      ? 'bg-blue-100 text-blue-800' 
+                      : 'bg-green-100 text-green-800'
+                  }`}>
+                    {submission.type || 'N/A'}
+                  </span>
+                </div>
+                <div className="truncate">
+                  <p className="text-sm font-medium text-gray-700 truncate">
+                    {submission.title || 'N/A'}
+                  </p>
+                </div>
+                <div className="text-xs text-gray-500">
+                  {submission.createdAt 
+                    ? new Date(submission.createdAt.seconds * 1000).toLocaleTimeString()
+                    : 'N/A'
+                  }
+                </div>
+                <div className="flex justify-end">
+                  {submission.fileUrl && (
+                    <a
+                      href={submission.fileUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center px-3 py-1 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 transition-colors"
+                    >
+                      <Eye className="w-4 h-4 mr-1" />
+                      View
+                    </a>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  </CardContent>
+)}
+                </Card>
+              ))
+            )}
+          </div>
+        )}
+
+        {/* Overview View */}
+        {activeView === 'overview' && (
+          <Card>
+            <CardHeader>
+              <CardTitle>All Submissions Overview</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {filteredSubmissions.length === 0 ? (
+                  <div className="text-center py-12">
+                    <FileText className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">No submissions found</h3>
+                    <p className="text-gray-500">Try adjusting your filters or check back later.</p>
+                  </div>
+                ) : (
+                  filteredSubmissions.map((submission, idx) => (
+                    <div key={`${submission.id}-${idx}`} className="bg-gray-50 p-4 rounded-lg border">
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 items-center">
+                        <div>
+                          <p className="font-medium text-gray-900">{submission.userName || 'N/A'}</p>
+                          <p className="text-sm text-gray-600">{submission.userEmail || 'N/A'}</p>
+                        </div>
+                        <div>
+                          <p className="font-medium text-gray-700">{submission.userCollege || 'N/A'}</p>
+                          <p className="text-sm text-gray-600">{submission.userCourse || 'N/A'}</p>
+                        </div>
+                        <div>
+                          <p className="font-medium text-gray-700">{submission.title || 'N/A'}</p>
+                          <span className={`inline-flex px-2 py-1 text-xs rounded-full ${
+                            submission.type === 'homework' 
+                              ? 'bg-blue-100 text-blue-800' 
+                              : 'bg-green-100 text-green-800'
+                          }`}>
+                            {submission.type || 'N/A'}
+                          </span>
+                        </div>
+                        <div>
+                          <p className="text-sm text-gray-600">
+                            {submission.createdAt 
+                              ? new Date(submission.createdAt.seconds * 1000).toLocaleDateString()
+                              : 'N/A'
+                            }
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            {submission.createdAt 
+                              ? new Date(submission.createdAt.seconds * 1000).toLocaleTimeString()
+                              : 'N/A'
+                            }
+                          </p>
+                        </div>
+                        <div className="flex justify-end">
+                          {submission.fileUrl && (
+                            <a
+                              href={submission.fileUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center px-3 py-1 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 transition-colors"
+                            >
+                              <Eye className="w-4 h-4 mr-1" />
+                              View File
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             </CardContent>
           </Card>
         )}
+
+        {/* Analytics View */}
+        {activeView === 'analytics' && (
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* College Distribution */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Submissions by College</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {(() => {
+                    const collegeStats = filteredSubmissions.reduce((acc, sub) => {
+                      const college = sub.userCollege || 'Unknown';
+                      acc[college] = (acc[college] || 0) + 1;
+                      return acc;
+                    }, {} as { [key: string]: number });
+
+                    const sortedColleges = Object.entries(collegeStats)
+                      .sort(([,a], [,b]) => b - a)
+                      .slice(0, 10);
+
+                    return (
+                      <div className="space-y-3">
+                        {sortedColleges.map(([college, count]) => (
+                          <div key={college} className="flex items-center justify-between">
+                            <span className="text-sm font-medium text-gray-700 truncate flex-1 mr-4">
+                              {college}
+                            </span>
+                            <div className="flex items-center space-x-2">
+                              <div className="w-24 bg-gray-200 rounded-full h-2">
+                                <div 
+                                  className="bg-blue-600 h-2 rounded-full" 
+                                  style={{ width: `${(count / Math.max(...sortedColleges.map(([,c]) => c))) * 100}%` }}
+                                ></div>
+                              </div>
+                              <span className="text-sm font-bold text-gray-900 w-8 text-right">
+                                {count}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
+                </CardContent>
+              </Card>
+
+              {/* Course Distribution */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Submissions by Course</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {(() => {
+                    const courseStats = filteredSubmissions.reduce((acc, sub) => {
+                      const course = sub.userCourse || 'Unknown';
+                      acc[course] = (acc[course] || 0) + 1;
+                      return acc;
+                    }, {} as { [key: string]: number });
+
+                    const sortedCourses = Object.entries(courseStats)
+                      .sort(([,a], [,b]) => b - a);
+
+                    return (
+                      <div className="space-y-3">
+                        {sortedCourses.map(([course, count]) => (
+                          <div key={course} className="flex items-center justify-between">
+                            <span className="text-sm font-medium text-gray-700 truncate flex-1 mr-4">
+                              {course}
+                            </span>
+                            <div className="flex items-center space-x-2">
+                              <div className="w-24 bg-gray-200 rounded-full h-2">
+                                <div 
+                                  className="bg-green-600 h-2 rounded-full" 
+                                  style={{ width: `${(count / Math.max(...sortedCourses.map(([,c]) => c))) * 100}%` }}
+                                ></div>
+                              </div>
+                              <span className="text-sm font-bold text-gray-900 w-8 text-right">
+                                {count}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Submission Timeline */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Daily Submission Timeline</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {dayWiseData.slice(0, 14).map((dayData) => (
+                    <div key={dayData.date} className="flex items-center space-x-4">
+                      <div className="w-24 text-sm text-gray-600 font-medium">
+                        {new Date(dayData.date).toLocaleDateString('en-US', { 
+                          month: 'short', 
+                          day: 'numeric' 
+                        })}
+                      </div>
+                      <div className="flex-1 flex items-center space-x-2">
+                        <div className="flex-1 bg-gray-200 rounded-full h-4 relative">
+                          <div 
+                            className="bg-gradient-to-r from-blue-500 to-blue-600 h-4 rounded-full flex items-center justify-center" 
+                            style={{ 
+                              width: `${Math.max((dayData.totalCount / Math.max(...dayWiseData.map(d => d.totalCount))) * 100, 5)}%` 
+                            }}
+                          >
+                            <span className="text-white text-xs font-medium">
+                              {dayData.totalCount}
+                            </span>
+                          </div>
+                        </div>
+                        <span className="text-sm text-gray-600 w-16 text-right">
+                          {dayData.totalCount} subs
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                {dayWiseData.length > 14 && (
+                  <div className="mt-4 text-center">
+                    <p className="text-sm text-gray-500">
+                      Showing last 14 days. Total: {dayWiseData.length} days tracked.
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Quick Stats */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <Card>
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-600">Average Daily</p>
+                      <p className="text-2xl font-bold text-gray-900">
+                        {dayWiseData.length > 0 
+                          ? Math.round(totalSubmissions / dayWiseData.length * 10) / 10
+                          : 0
+                        }
+                      </p>
+                      <p className="text-xs text-gray-500">submissions per day</p>
+                    </div>
+                    <TrendingUp className="w-8 h-8 text-blue-500" />
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-600">Peak Day</p>
+                      <p className="text-2xl font-bold text-gray-900">
+                        {dayWiseData.length > 0 
+                          ? Math.max(...dayWiseData.map(d => d.totalCount))
+                          : 0
+                        }
+                      </p>
+                      <p className="text-xs text-gray-500">highest single day</p>
+                    </div>
+                    <BarChart3 className="w-8 h-8 text-green-500" />
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-600">Submission Types</p>
+                      <p className="text-2xl font-bold text-gray-900">
+                        {(() => {
+                          const typeStats = filteredSubmissions.reduce((acc, sub) => {
+                            const type = sub.type || 'unknown';
+                            acc[type] = (acc[type] || 0) + 1;
+                            return acc;
+                          }, {} as { [key: string]: number });
+                          
+                          const topType = Object.entries(typeStats)
+                            .sort(([,a], [,b]) => b - a)[0];
+                          
+                          return topType ? topType[1] : 0;
+                        })()}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        {(() => {
+                          const typeStats = filteredSubmissions.reduce((acc, sub) => {
+                            const type = sub.type || 'unknown';
+                            acc[type] = (acc[type] || 0) + 1;
+                            return acc;
+                          }, {} as { [key: string]: number });
+                          
+                          const topType = Object.entries(typeStats)
+                            .sort(([,a], [,b]) => b - a)[0];
+                          
+                          return topType ? `${topType[0]} (most common)` : 'no data';
+                        })()}
+                      </p>
+                    </div>
+                    <FileText className="w-8 h-8 text-purple-500" />
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        )}
       </div>
+
+      {/* Loading Overlay */}
+      {loading && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg shadow-xl">
+            <div className="flex items-center space-x-3">
+              <RefreshCw className="w-6 h-6 animate-spin text-blue-600" />
+              <span className="text-lg font-medium">Loading submissions...</span>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

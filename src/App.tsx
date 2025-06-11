@@ -3,6 +3,7 @@ import LoginPage from "./components/LoginPage";
 import CompleteProfilePage from "./pages/CompleteProfilePage";
 import StudentDashboard from "./pages/StudentDashboard";
 import { useFirebaseAuth } from "./hooks/useFirebaseAuth";
+import AdminDashboard from "@/pages/AdminDashboard";
 
 function App() {
   const { user, loading } = useFirebaseAuth();
@@ -20,6 +21,7 @@ function App() {
       <Routes>
         <Route path="/" element={<LoginPage />} />
         <Route path="/complete-profile" element={<CompleteProfilePage />} />
+        <Route path="/admin" element={<AdminDashboard />} />
         <Route path="/dashboard" element={<StudentDashboard user={user} />} />
       </Routes>
     </BrowserRouter>

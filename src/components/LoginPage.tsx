@@ -37,7 +37,7 @@ const LoginPage = () => {
             <img src="/v2v.png" alt="V2V Logo" />
           </div>
           <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-2">V2V Edtech LLP</h1>
-          <p className="text-lg text-gray-700 md:text-xl">Data Analysis Internship Portal</p>
+          <p className="text-lg text-gray-700 md:text-xl"> Internship Portal</p>
         </div>
 
         {/* Login Card */}
@@ -86,7 +86,7 @@ const LoginPage = () => {
         {/* Info Section */}
         <div className="text-center">
           <div className="bg-white/80 backdrop-blur-sm rounded-xl p-5 border border-gray-200 shadow-sm transition-all hover:shadow-md">
-            <h3 className="font-semibold text-gray-800 text-lg md:text-xl mb-3">3-Month Data Analysis Internship</h3>
+            <h3 className="font-semibold text-gray-800 text-lg md:text-xl mb-3">3-Month Internship</h3>
             <p className="text-gray-600 text-sm md:text-base">
               Submit your class work and homework assignments through this portal
             </p>
