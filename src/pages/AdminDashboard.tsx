@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { COLLEGES } from "@/constants/colleges";
+import * as XLSX from 'xlsx';
 import { 
   Calendar, 
   Download, 
@@ -191,7 +192,7 @@ const AdminDashboard = () => {
 
 const exportToExcel = () => {
     // Import XLSX
-    const XLSX = (window as any).XLSX;
+    
     if (!XLSX) {
       alert('Excel export functionality is not available. Please try again.');
       return;
@@ -251,7 +252,7 @@ const exportToExcel = () => {
   };
 
   const createCourseSheet = (submissions: Submission[], allDates: string[], type: string) => {
-    const XLSX = (window as any).XLSX;
+    
     
     // Get unique students
     const students = [...new Set(submissions.map(sub => sub.userEmail))].sort();
@@ -332,7 +333,7 @@ const exportToExcel = () => {
   };
 
   const createSummarySheet = (submissions: Submission[], allDates: string[]) => {
-    const XLSX = (window as any).XLSX;
+    
     
     // Calculate statistics
     const totalSubmissions = submissions.length;
