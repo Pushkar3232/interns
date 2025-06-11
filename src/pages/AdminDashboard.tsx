@@ -189,32 +189,218 @@ const AdminDashboard = () => {
     setExpandedDays(newExpanded);
   };
 
-  const exportToCSV = () => {
-    const headers = ['Date', 'Name', 'Email', 'College', 'Course', 'Type', 'Title', 'File URL'];
-    const csvData = filteredSubmissions.map(sub => [
-      sub.createdAt ? new Date(sub.createdAt.seconds * 1000).toLocaleDateString() : 'N/A',
-      sub.userName || 'N/A',
-      sub.userEmail || 'N/A',
-      sub.userCollege || 'N/A',
-      sub.userCourse || 'N/A',
-      sub.type || 'N/A',
-      sub.title || 'N/A',
-      sub.fileUrl || 'N/A'
-    ]);
+const exportToExcel = () => {
+    // Import XLSX
+    const XLSX = (window as any).XLSX;
+    if (!XLSX) {
+      alert('Excel export functionality is not available. Please try again.');
+      return;
+    }
 
-    const csvContent = [headers, ...csvData]
-      .map(row => row.map(cell => `"${cell}"`).join(','))
-      .join('\n');
+    // Get all unique dates and sort them
+    const allDates = [...new Set(filteredSubmissions
+      .filter(sub => sub.createdAt?.seconds)
+      .map(sub => new Date(sub.createdAt!.seconds * 1000).toDateString())
+    )].sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
 
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `submissions_${new Date().toISOString().split('T')[0]}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    // Group submissions by course
+    const courseGroups = filteredSubmissions.reduce((acc, sub) => {
+      const course = sub.userCourse || 'Unknown Course';
+      if (!acc[course]) {
+        acc[course] = [];
+      }
+      acc[course].push(sub);
+      return acc;
+    }, {} as { [course: string]: Submission[] });
+
+    const workbook = XLSX.utils.book_new();
+
+    // Create sheets for each course
+    Object.entries(courseGroups).forEach(([courseName, courseSubmissions]) => {
+      // Separate homework and classwork
+      const homeworkSubmissions = courseSubmissions.filter(sub => sub.type === 'homework');
+      const classworkSubmissions = courseSubmissions.filter(sub => sub.type === 'classwork');
+
+      // Create homework sheet
+      if (homeworkSubmissions.length > 0) {
+        const homeworkSheet = createCourseSheet(homeworkSubmissions, allDates, 'Homework');
+        const homeworkSheetName = `${courseName.substring(0, 20)}_HW`.replace(/[^\w\s]/gi, '');
+        XLSX.utils.book_append_sheet(workbook, homeworkSheet, homeworkSheetName);
+      }
+
+      // Create classwork sheet
+      if (classworkSubmissions.length > 0) {
+        const classworkSheet = createCourseSheet(classworkSubmissions, allDates, 'Classwork');
+        const classworkSheetName = `${courseName.substring(0, 20)}_CW`.replace(/[^\w\s]/gi, '');
+        XLSX.utils.book_append_sheet(workbook, classworkSheet, classworkSheetName);
+      }
+
+      // Create combined sheet for the course
+      const combinedSheet = createCourseSheet(courseSubmissions, allDates, 'All');
+      const combinedSheetName = `${courseName.substring(0, 25)}`.replace(/[^\w\s]/gi, '');
+      XLSX.utils.book_append_sheet(workbook, combinedSheet, combinedSheetName);
+    });
+
+    // Create overall summary sheet
+    const summarySheet = createSummarySheet(filteredSubmissions, allDates);
+    XLSX.utils.book_append_sheet(workbook, summarySheet, 'Summary');
+
+    // Write and download the file
+    const fileName = `submissions_${new Date().toISOString().split('T')[0]}.xlsx`;
+    XLSX.writeFile(workbook, fileName);
   };
 
+  const createCourseSheet = (submissions: Submission[], allDates: string[], type: string) => {
+    const XLSX = (window as any).XLSX;
+    
+    // Get unique students
+    const students = [...new Set(submissions.map(sub => sub.userEmail))].sort();
+    
+    // Create student info map
+    const studentInfo = submissions.reduce((acc, sub) => {
+      if (sub.userEmail && !acc[sub.userEmail]) {
+        acc[sub.userEmail] = {
+          name: sub.userName || 'N/A',
+          college: sub.userCollege || 'N/A',
+          email: sub.userEmail
+        };
+      }
+      return acc;
+    }, {} as { [email: string]: { name: string; college: string; email: string } });
+
+    // Create submission map for quick lookup
+    const submissionMap = submissions.reduce((acc, sub) => {
+      if (sub.userEmail && sub.createdAt?.seconds) {
+        const date = new Date(sub.createdAt.seconds * 1000).toDateString();
+        const key = `${sub.userEmail}-${date}`;
+        if (!acc[key]) {
+          acc[key] = [];
+        }
+        acc[key].push(sub);
+      }
+      return acc;
+    }, {} as { [key: string]: Submission[] });
+
+    // Build headers
+    const headers = ['College Name', 'Student Name', 'Email', ...allDates];
+    
+    // Build data rows
+    const data = students.map(email => {
+      const info = studentInfo[email];
+      const row = [info.college, info.name, info.email];
+      
+      // For each date, check if student submitted
+      allDates.forEach(date => {
+        const key = `${email}-${date}`;
+        const daySubmissions = submissionMap[key] || [];
+        if (daySubmissions.length > 0) {
+          row.push(`Yes (${daySubmissions.length})`);
+        } else {
+          row.push('');
+        }
+      });
+      
+      return row;
+    });
+
+    // Create worksheet
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...data]);
+    
+    // Auto-size columns
+    const colWidths = headers.map((header, index) => {
+      const maxLength = Math.max(
+        header.length,
+        ...data.map(row => String(row[index] || '').length)
+      );
+      return { width: Math.min(Math.max(maxLength + 2, 10), 30) };
+    });
+    ws['!cols'] = colWidths;
+
+    // Style the header row
+    const headerRange = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+    for (let col = headerRange.s.c; col <= headerRange.e.c; col++) {
+      const cellAddress = XLSX.utils.encode_cell({ r: 0, c: col });
+      if (!ws[cellAddress]) continue;
+      ws[cellAddress].s = {
+        font: { bold: true },
+        fill: { fgColor: { rgb: 'CCCCCC' } },
+        alignment: { horizontal: 'center' }
+      };
+    }
+
+    return ws;
+  };
+
+  const createSummarySheet = (submissions: Submission[], allDates: string[]) => {
+    const XLSX = (window as any).XLSX;
+    
+    // Calculate statistics
+    const totalSubmissions = submissions.length;
+    const totalStudents = new Set(submissions.map(s => s.userEmail)).size;
+    const totalColleges = new Set(submissions.map(s => s.userCollege)).size;
+    
+    // Course breakdown
+    const courseStats = submissions.reduce((acc, sub) => {
+      const course = sub.userCourse || 'Unknown';
+      acc[course] = (acc[course] || 0) + 1;
+      return acc;
+    }, {} as { [key: string]: number });
+
+    // College breakdown
+    const collegeStats = submissions.reduce((acc, sub) => {
+      const college = sub.userCollege || 'Unknown';
+      acc[college] = (acc[college] || 0) + 1;
+      return acc;
+    }, {} as { [key: string]: number });
+
+    // Type breakdown
+    const typeStats = submissions.reduce((acc, sub) => {
+      const type = sub.type || 'Unknown';
+      acc[type] = (acc[type] || 0) + 1;
+      return acc;
+    }, {} as { [key: string]: number });
+
+    // Daily breakdown
+    const dailyStats = allDates.map(date => {
+      const daySubmissions = submissions.filter(sub => 
+        sub.createdAt?.seconds && 
+        new Date(sub.createdAt.seconds * 1000).toDateString() === date
+      );
+      return [date, daySubmissions.length];
+    });
+
+    // Build summary data
+    const summaryData = [
+      ['SUBMISSION SUMMARY REPORT'],
+      ['Generated on:', new Date().toLocaleString()],
+      [''],
+      ['OVERVIEW'],
+      ['Total Submissions:', totalSubmissions],
+      ['Total Students:', totalStudents],
+      ['Total Colleges:', totalColleges],
+      ['Date Range:', allDates.length > 0 ? `${allDates[0]} to ${allDates[allDates.length - 1]}` : 'No dates'],
+      [''],
+      ['SUBMISSIONS BY COURSE'],
+      ...Object.entries(courseStats).map(([course, count]) => [course, count]),
+      [''],
+      ['SUBMISSIONS BY COLLEGE'],
+      ...Object.entries(collegeStats).map(([college, count]) => [college, count]),
+      [''],
+      ['SUBMISSIONS BY TYPE'],
+      ...Object.entries(typeStats).map(([type, count]) => [type, count]),
+      [''],
+      ['DAILY BREAKDOWN'],
+      ['Date', 'Submissions'],
+      ...dailyStats
+    ];
+
+    const ws = XLSX.utils.aoa_to_sheet(summaryData);
+    
+    // Auto-size columns
+    ws['!cols'] = [{ width: 30 }, { width: 20 }];
+
+    return ws;
+  };
   if (!isLoggedIn) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
@@ -313,7 +499,7 @@ const AdminDashboard = () => {
               </Button>
               <Button
                 variant="outline"
-                onClick={exportToCSV}
+                onClick={exportToExcel}
                 size="sm"
               >
                 <Download className="w-4 h-4 mr-1" />
