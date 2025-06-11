@@ -7,23 +7,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/components/ui/use-toast";
 import { Check, User, GraduationCap, Code } from "lucide-react";
+import { COLLEGES } from "@/constants/colleges";
 
-const COLLEGES = [
-  "MIT",
-  "Stanford University",
-  "Harvard University",
-  "UC Berkeley",
-  "Carnegie Mellon",
-  "Other"
-];
 
 const internshipOptions = [
   "Data Analysis",
-  "Web Development", 
-  "Mobile Application Development",
-  "Machine Learning",
-  "DevOps",
-  "UI/UX Design"
+  "Web Development",
+  "Mobile Application Development"
 ];
 
 export default function CompleteProfilePage() {

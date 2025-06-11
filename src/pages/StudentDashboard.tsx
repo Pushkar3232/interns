@@ -146,7 +146,11 @@ const StudentDashboard = ({ user }: StudentDashboardProps) => {
           </div>
           <Button 
             variant="outline" 
-            onClick={logout}
+            onClick={async () => {
+  await logout();
+  window.location.href = "/";
+}}
+
             className="group hover:bg-red-50 hover:border-red-200 hover:text-red-700 transition-all duration-200"
           >
             <LogOut className="w-4 h-4 mr-2 group-hover:text-red-500" />
