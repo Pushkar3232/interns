@@ -43,10 +43,19 @@ const getUserSubmissions = async (userId: string): Promise<Submission[]> => {
     ...(doc.data() as Submission),
   }));
 };
-
+async function hasSubmitted(userId: string, assignmentId: string): Promise<boolean> {
+  const q = query(
+    collection(db, "submissions"),
+    where("userId", "==", userId),
+    where("assignmentId", "==", assignmentId)
+  );
+  const snap = await getDocs(q);
+  return !snap.empty;
+}
 export const submissionService = {
   addSubmission,
   getUserSubmissions,
+  hasSubmitted,
   getAllSubmissions: async () => {
     try {
       const snapshot = await getDocs(collection(db, "submissions"));

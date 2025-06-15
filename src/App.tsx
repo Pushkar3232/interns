@@ -5,6 +5,7 @@ import StudentDashboard from "./pages/StudentDashboard";
 import { useFirebaseAuth } from "./hooks/useFirebaseAuth";
 import AdminDashboard from "@/pages/AdminDashboard";
 
+
 function App() {
   const { user, loading } = useFirebaseAuth();
 

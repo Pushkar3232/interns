@@ -4,6 +4,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { COLLEGES } from "@/constants/colleges";
+import AssignmentForm from "@/components/AssignmentForm";
+import { assignmentService } from "@/services/assignmentService";
+import AdminLeaderboard from "@/components/AdminLeaderboard";
 import * as XLSX from 'xlsx';
 import { 
   Calendar, 
@@ -36,6 +39,7 @@ interface DayStats {
 
 const AdminDashboard = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [assignments, setAssignments] = useState<any[]>([]);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -52,7 +56,9 @@ const AdminDashboard = () => {
   const [dateRange, setDateRange] = useState({ start: "", end: "" });
 
   // View state
-  const [activeView, setActiveView] = useState<'overview' | 'daily' | 'analytics'>('daily');
+  const [activeTab, setActiveTab] = useState<"daily" | "overview"  | "assignments" | "leaderboard">("daily");
+
+
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
 
   const handleLogin = () => {
@@ -140,6 +146,7 @@ const AdminDashboard = () => {
   useEffect(() => {
     if (isLoggedIn) {
       loadSubmissions();
+      assignmentService.getAllAssignments().then(setAssignments);
     }
   }, [isLoggedIn]);
 
@@ -461,32 +468,34 @@ const exportToExcel = () => {
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center space-x-4">
               <h1 className="text-2xl font-bold text-gray-900">📊 Admin Dashboard</h1>
-              <div className="hidden sm:flex space-x-2">
-                <Button
-                  variant={activeView === 'daily' ? 'default' : 'outline'}
-                  onClick={() => setActiveView('daily')}
-                  size="sm"
-                >
-                  <Calendar className="w-4 h-4 mr-1" />
-                  Daily View
-                </Button>
-                <Button
-                  variant={activeView === 'overview' ? 'default' : 'outline'}
-                  onClick={() => setActiveView('overview')}
-                  size="sm"
-                >
-                  <FileText className="w-4 h-4 mr-1" />
-                  Overview
-                </Button>
-                <Button
-                  variant={activeView === 'analytics' ? 'default' : 'outline'}
-                  onClick={() => setActiveView('analytics')}
-                  size="sm"
-                >
-                  <BarChart3 className="w-4 h-4 mr-1" />
-                  Analytics
-                </Button>
-              </div>
+              <div className="flex flex-wrap gap-2 mb-6">
+  <Button
+    variant={activeTab === "daily" ? "default" : "outline"}
+    onClick={() => setActiveTab("daily")}
+  >
+    📆 Daily View
+  </Button>
+  <Button
+    variant={activeTab === "overview" ? "default" : "outline"}
+    onClick={() => setActiveTab("overview")}
+  >
+    📄 Overview
+  </Button>
+  
+  <Button
+    variant={activeTab === "assignments" ? "default" : "outline"}
+    onClick={() => setActiveTab("assignments")}
+  >
+    📚 Assignments
+  </Button>
+  <Button
+    variant={activeTab === "leaderboard" ? "default" : "outline"}
+    onClick={() => setActiveTab("leaderboard")}
+  >
+    🏅 Leaderboard
+  </Button>
+</div>
+
             </div>
             <div className="flex items-center space-x-4">
               <Button
@@ -570,6 +579,7 @@ const exportToExcel = () => {
             </CardContent>
           </Card>
         </div>
+        
 
         {/* Filters */}
         <Card className="mb-8">
@@ -690,8 +700,8 @@ const exportToExcel = () => {
         </Card>
 
         {/* Daily View */}
-        {activeView === 'daily' && (
-          <div className="space-y-6">
+        {activeTab  === 'daily' && (
+          <div className="space-y-6 ">
             {dayWiseData.length === 0 ? (
               <Card>
                 <CardContent className="p-12 text-center">
@@ -773,7 +783,7 @@ const exportToExcel = () => {
                       </div>
                     </div>
                   </CardHeader>
-
+                  
                   {expandedDays.has(dayData.date) && (
   <CardContent className="border-t bg-gray-50">
     <div className="space-y-4">
@@ -852,7 +862,7 @@ const exportToExcel = () => {
         )}
 
         {/* Overview View */}
-        {activeView === 'overview' && (
+        {activeTab  === 'overview' && (
           <Card>
             <CardHeader>
               <CardTitle>All Submissions Overview</CardTitle>
@@ -915,6 +925,7 @@ const exportToExcel = () => {
                           )}
                         </div>
                       </div>
+                      
                     </div>
                   ))
                 )}
@@ -924,219 +935,52 @@ const exportToExcel = () => {
         )}
 
         {/* Analytics View */}
-        {activeView === 'analytics' && (
-          <div className="space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* College Distribution */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Submissions by College</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {(() => {
-                    const collegeStats = filteredSubmissions.reduce((acc, sub) => {
-                      const college = sub.userCollege || 'Unknown';
-                      acc[college] = (acc[college] || 0) + 1;
-                      return acc;
-                    }, {} as { [key: string]: number });
-
-                    const sortedColleges = Object.entries(collegeStats)
-                      .sort(([,a], [,b]) => b - a)
-                      .slice(0, 10);
-
-                    return (
-                      <div className="space-y-3">
-                        {sortedColleges.map(([college, count]) => (
-                          <div key={college} className="flex items-center justify-between">
-                            <span className="text-sm font-medium text-gray-700 truncate flex-1 mr-4">
-                              {college}
-                            </span>
-                            <div className="flex items-center space-x-2">
-                              <div className="w-24 bg-gray-200 rounded-full h-2">
-                                <div 
-                                  className="bg-blue-600 h-2 rounded-full" 
-                                  style={{ width: `${(count / Math.max(...sortedColleges.map(([,c]) => c))) * 100}%` }}
-                                ></div>
-                              </div>
-                              <span className="text-sm font-bold text-gray-900 w-8 text-right">
-                                {count}
-                              </span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    );
-                  })()}
-                </CardContent>
-              </Card>
-
-              {/* Course Distribution */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Submissions by Course</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {(() => {
-                    const courseStats = filteredSubmissions.reduce((acc, sub) => {
-                      const course = sub.userCourse || 'Unknown';
-                      acc[course] = (acc[course] || 0) + 1;
-                      return acc;
-                    }, {} as { [key: string]: number });
-
-                    const sortedCourses = Object.entries(courseStats)
-                      .sort(([,a], [,b]) => b - a);
-
-                    return (
-                      <div className="space-y-3">
-                        {sortedCourses.map(([course, count]) => (
-                          <div key={course} className="flex items-center justify-between">
-                            <span className="text-sm font-medium text-gray-700 truncate flex-1 mr-4">
-                              {course}
-                            </span>
-                            <div className="flex items-center space-x-2">
-                              <div className="w-24 bg-gray-200 rounded-full h-2">
-                                <div 
-                                  className="bg-green-600 h-2 rounded-full" 
-                                  style={{ width: `${(count / Math.max(...sortedCourses.map(([,c]) => c))) * 100}%` }}
-                                ></div>
-                              </div>
-                              <span className="text-sm font-bold text-gray-900 w-8 text-right">
-                                {count}
-                              </span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    );
-                  })()}
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Submission Timeline */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Daily Submission Timeline</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {dayWiseData.slice(0, 14).map((dayData) => (
-                    <div key={dayData.date} className="flex items-center space-x-4">
-                      <div className="w-24 text-sm text-gray-600 font-medium">
-                        {new Date(dayData.date).toLocaleDateString('en-US', { 
-                          month: 'short', 
-                          day: 'numeric' 
-                        })}
-                      </div>
-                      <div className="flex-1 flex items-center space-x-2">
-                        <div className="flex-1 bg-gray-200 rounded-full h-4 relative">
-                          <div 
-                            className="bg-gradient-to-r from-blue-500 to-blue-600 h-4 rounded-full flex items-center justify-center" 
-                            style={{ 
-                              width: `${Math.max((dayData.totalCount / Math.max(...dayWiseData.map(d => d.totalCount))) * 100, 5)}%` 
-                            }}
-                          >
-                            <span className="text-white text-xs font-medium">
-                              {dayData.totalCount}
-                            </span>
-                          </div>
-                        </div>
-                        <span className="text-sm text-gray-600 w-16 text-right">
-                          {dayData.totalCount} subs
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                {dayWiseData.length > 14 && (
-                  <div className="mt-4 text-center">
-                    <p className="text-sm text-gray-500">
-                      Showing last 14 days. Total: {dayWiseData.length} days tracked.
+        
+        {activeTab === "assignments" && (
+  <>
+    <h2 className="text-xl font-bold mb-4">📚 Assignment Management</h2>
+    <AssignmentForm />
+    <Card className="mb-8 mt-4">
+      <CardHeader>
+        <CardTitle>📌 All Assignments</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {assignments.length === 0 ? (
+          <p className="text-gray-500">No assignments created yet.</p>
+        ) : (
+          assignments.map((assignment) => (
+            <div key={assignment.id} className="border p-4 rounded-md bg-white shadow-sm">
+              <div className="flex justify-between items-center">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">{assignment.title}</h3>
+                  <p className="text-sm text-gray-500">{assignment.description || "No description"}</p>
+                  <p className="text-sm text-gray-600 mt-1">
+                    🏷 Type: <strong className="capitalize">{assignment.type}</strong> | 📘 Course: <strong>{assignment.course}</strong>
+                  </p>
+                  {assignment.deadline && (
+                    <p className="text-sm text-red-600 mt-1">
+                      ⏰ Deadline: {new Date(assignment.deadline.seconds * 1000).toLocaleDateString()}
                     </p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Quick Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <Card>
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-600">Average Daily</p>
-                      <p className="text-2xl font-bold text-gray-900">
-                        {dayWiseData.length > 0 
-                          ? Math.round(totalSubmissions / dayWiseData.length * 10) / 10
-                          : 0
-                        }
-                      </p>
-                      <p className="text-xs text-gray-500">submissions per day</p>
-                    </div>
-                    <TrendingUp className="w-8 h-8 text-blue-500" />
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-600">Peak Day</p>
-                      <p className="text-2xl font-bold text-gray-900">
-                        {dayWiseData.length > 0 
-                          ? Math.max(...dayWiseData.map(d => d.totalCount))
-                          : 0
-                        }
-                      </p>
-                      <p className="text-xs text-gray-500">highest single day</p>
-                    </div>
-                    <BarChart3 className="w-8 h-8 text-green-500" />
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-600">Submission Types</p>
-                      <p className="text-2xl font-bold text-gray-900">
-                        {(() => {
-                          const typeStats = filteredSubmissions.reduce((acc, sub) => {
-                            const type = sub.type || 'unknown';
-                            acc[type] = (acc[type] || 0) + 1;
-                            return acc;
-                          }, {} as { [key: string]: number });
-                          
-                          const topType = Object.entries(typeStats)
-                            .sort(([,a], [,b]) => b - a)[0];
-                          
-                          return topType ? topType[1] : 0;
-                        })()}
-                      </p>
-                      <p className="text-xs text-gray-500">
-                        {(() => {
-                          const typeStats = filteredSubmissions.reduce((acc, sub) => {
-                            const type = sub.type || 'unknown';
-                            acc[type] = (acc[type] || 0) + 1;
-                            return acc;
-                          }, {} as { [key: string]: number });
-                          
-                          const topType = Object.entries(typeStats)
-                            .sort(([,a], [,b]) => b - a)[0];
-                          
-                          return topType ? `${topType[0]} (most common)` : 'no data';
-                        })()}
-                      </p>
-                    </div>
-                    <FileText className="w-8 h-8 text-purple-500" />
-                  </div>
-                </CardContent>
-              </Card>
+                  )}
+                </div>
+                <span className="text-xs text-gray-400">
+                  Created: {new Date(assignment.createdAt.seconds * 1000).toLocaleDateString()}
+                </span>
+              </div>
             </div>
-          </div>
+          ))
         )}
+      </CardContent>
+    </Card>
+  </>
+)}
+
+{activeTab === "leaderboard" && (
+  <>
+    <h2 className="text-xl font-bold mb-4">🏅 Leaderboard</h2>
+    <AdminLeaderboard />
+  </>
+)}
       </div>
 
       {/* Loading Overlay */}
