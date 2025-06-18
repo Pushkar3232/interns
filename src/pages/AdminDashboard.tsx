@@ -447,9 +447,7 @@ const exportToExcel = () => {
             >
               🚀 Access Dashboard
             </Button>
-            <p className="text-xs text-gray-500 text-center">
-              Demo: admin / admin123
-            </p>
+            
           </CardContent>
         </Card>
       </div>
