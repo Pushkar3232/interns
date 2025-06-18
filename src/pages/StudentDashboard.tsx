@@ -14,7 +14,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import SubmissionForm from "@/components/SubmissionForm";
 import SubmissionHistory from "@/components/SubmissionHistory";
 import StudentLeaderboard from "@/components/StudentLeaderboard";
-import { Analytics } from "@vercel/analytics/next"
+import { Analytics } from "@vercel/analytics/react"
 
 import { 
   User as UserIcon, 
