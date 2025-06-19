@@ -65,7 +65,7 @@ const AdminDashboard = () => {
     if (username === "admin" && password === "admin123") {
       setIsLoggedIn(true);
     } else {
-      alert("❌ Invalid credentials. Use admin / admin123");
+      alert("❌ Invalid credentials.");
     }
   };
 
@@ -246,20 +246,20 @@ const exportToExcel = async () => {
 
     // Homework Sheet
     if (homeworkSubmissions.length > 0) {
-      const homeworkSheet = createCourseSheet(homeworkSubmissions, allDates, 'Homework');
+      const homeworkSheet = createCourseSheet(homeworkSubmissions, allDates, 'Homework', assignmentMap);
       const homeworkSheetName = `${courseName.substring(0, 20)}_HW`.replace(/[^\w\s]/gi, '');
       XLSX.utils.book_append_sheet(workbook, homeworkSheet, homeworkSheetName);
     }
 
     // Classwork Sheet
     if (classworkSubmissions.length > 0) {
-      const classworkSheet = createCourseSheet(classworkSubmissions, allDates, 'Classwork');
+      const classworkSheet = createCourseSheet(classworkSubmissions, allDates, 'Classwork', assignmentMap);
       const classworkSheetName = `${courseName.substring(0, 20)}_CW`.replace(/[^\w\s]/gi, '');
       XLSX.utils.book_append_sheet(workbook, classworkSheet, classworkSheetName);
     }
 
     // Combined Sheet
-    const combinedSheet = createCourseSheet(courseSubmissions, allDates, 'All');
+    const combinedSheet = createCourseSheet(courseSubmissions, allDates, 'All', assignmentMap);
     const combinedSheetName = `${courseName.substring(0, 25)}`.replace(/[^\w\s]/gi, '');
     XLSX.utils.book_append_sheet(workbook, combinedSheet, combinedSheetName);
   });
@@ -274,86 +274,81 @@ const exportToExcel = async () => {
 };
 
 
-  const createCourseSheet = (submissions: Submission[], allDates: string[], type: string) => {
-    
-    
-    // Get unique students
-    const students = [...new Set(submissions.map(sub => sub.userEmail))].sort();
-    
-    // Create student info map
-    const studentInfo = submissions.reduce((acc, sub) => {
-      if (sub.userEmail && !acc[sub.userEmail]) {
-        acc[sub.userEmail] = {
-          name: sub.userName || 'N/A',
-          college: sub.userCollege || 'N/A',
-          email: sub.userEmail
-        };
-      }
-      return acc;
-    }, {} as { [email: string]: { name: string; college: string; email: string } });
+  const createCourseSheet = (
+  submissions: Submission[],
+  allDates: string[],
+  type: string,
+  assignmentMap: Map<string, any>
+) => {
+  // Get unique students
+  const students = [...new Set(submissions.map(sub => sub.userEmail))].sort();
 
-    // Create submission map for quick lookup
-    const submissionMap = submissions.reduce((acc, sub) => {
-      if (sub.userEmail && sub.createdAt?.seconds) {
-        const date = new Date(sub.createdAt.seconds * 1000).toDateString();
-        const key = `${sub.userEmail}-${date}`;
-        if (!acc[key]) {
-          acc[key] = [];
-        }
-        acc[key].push(sub);
-      }
-      return acc;
-    }, {} as { [key: string]: Submission[] });
-
-    // Build headers
-    const headers = ['College Name', 'Student Name', 'Email', ...allDates];
-    
-    // Build data rows
-    const data = students.map(email => {
-      const info = studentInfo[email];
-      const row = [info.college, info.name, info.email];
-      
-      // For each date, check if student submitted
-      allDates.forEach(date => {
-        const key = `${email}-${date}`;
-        const daySubmissions = submissionMap[key] || [];
-        if (daySubmissions.length > 0) {
-          row.push(`Yes (${daySubmissions.length})`);
-        } else {
-          row.push('');
-        }
-      });
-      
-      return row;
-    });
-
-    // Create worksheet
-    const ws = XLSX.utils.aoa_to_sheet([headers, ...data]);
-    
-    // Auto-size columns
-    const colWidths = headers.map((header, index) => {
-      const maxLength = Math.max(
-        header.length,
-        ...data.map(row => String(row[index] || '').length)
-      );
-      return { width: Math.min(Math.max(maxLength + 2, 10), 30) };
-    });
-    ws['!cols'] = colWidths;
-
-    // Style the header row
-    const headerRange = XLSX.utils.decode_range(ws['!ref'] || 'A1');
-    for (let col = headerRange.s.c; col <= headerRange.e.c; col++) {
-      const cellAddress = XLSX.utils.encode_cell({ r: 0, c: col });
-      if (!ws[cellAddress]) continue;
-      ws[cellAddress].s = {
-        font: { bold: true },
-        fill: { fgColor: { rgb: 'CCCCCC' } },
-        alignment: { horizontal: 'center' }
+  // Create student info map
+  const studentInfo = submissions.reduce((acc, sub) => {
+    if (sub.userEmail && !acc[sub.userEmail]) {
+      acc[sub.userEmail] = {
+        name: sub.userName || 'N/A',
+        college: sub.userCollege || 'N/A',
+        email: sub.userEmail
       };
     }
+    return acc;
+  }, {} as { [email: string]: { name: string; college: string; email: string } });
 
-    return ws;
-  };
+  // Create submission map based on assignment creation date
+  const submissionMap = submissions.reduce((acc, sub) => {
+    if (!sub.userEmail || !sub.assignmentId) return acc;
+
+    const assignment = assignmentMap.get(sub.assignmentId);
+    if (!assignment?.createdAt?.seconds) return acc;
+
+    const date = new Date(assignment.createdAt.seconds * 1000).toDateString();
+    const key = `${sub.userEmail}-${date}`;
+    if (!acc[key]) {
+      acc[key] = [];
+    }
+    acc[key].push(sub);
+    return acc;
+  }, {} as { [key: string]: Submission[] });
+
+  // Build headers
+  const headers = ['College Name', 'Student Name', 'Email', ...allDates];
+
+  // Build data rows
+  const data = students.map(email => {
+    const info = studentInfo[email];
+    const row = [info.college, info.name, info.email];
+
+    // For each date, check if student submitted
+    allDates.forEach(date => {
+      const key = `${email}-${date}`;
+      const daySubmissions = submissionMap[key] || [];
+      if (daySubmissions.length > 0) {
+        row.push(`Yes (${daySubmissions.length})`);
+      } else {
+        row.push('');
+      }
+    });
+
+    return row;
+  });
+
+  // Create worksheet
+  const ws = XLSX.utils.aoa_to_sheet([headers, ...data]);
+
+  // Auto-size columns
+  const colWidths = headers.map((header, index) => {
+    const maxLength = Math.max(
+      header.length,
+      ...data.map(row => String(row[index] || '').length)
+    );
+    return { width: Math.min(Math.max(maxLength + 2, 10), 30) };
+  });
+  ws['!cols'] = colWidths;
+
+  return ws;
+};
+
 
   const createSummarySheet = (
   submissions: Submission[],
