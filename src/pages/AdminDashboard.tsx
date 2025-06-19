@@ -69,63 +69,68 @@ const AdminDashboard = () => {
     }
   };
 
-  const processSubmissionsData = (submissions: Submission[]) => {
+  const processSubmissionsData = async (submissions: Submission[]) => {
   const dayMap: { [day: string]: Submission[] } = {};
 
-  submissions.forEach(sub => {
-    if (sub.createdAt?.seconds) {
-      const date = new Date(sub.createdAt.seconds * 1000);
-      const dayKey = date.toDateString();
+  // Load all assignments for lookup
+  const assignmentMap = new Map<string, any>();
+  if (assignments.length === 0) {
+    const fetchedAssignments = await assignmentService.getAllAssignments();
+    setAssignments(fetchedAssignments);
+    fetchedAssignments.forEach((a: any) => assignmentMap.set(a.id, a));
+  } else {
+    assignments.forEach((a: any) => assignmentMap.set(a.id, a));
+  }
 
-      if (!dayMap[dayKey]) {
-        dayMap[dayKey] = [];
-      }
-      dayMap[dayKey].push(sub);
+  for (const sub of submissions) {
+    const assignment = assignmentMap.get(sub.assignmentId);
+    if (!assignment?.createdAt?.seconds) continue;
+
+    const assignDate = new Date(assignment.createdAt.seconds * 1000).toDateString();
+
+    if (!dayMap[assignDate]) {
+      dayMap[assignDate] = [];
     }
-  });
+    dayMap[assignDate].push(sub);
+  }
 
-  const dayStats: DayStats[] = Object.entries(dayMap)
-    .map(([date, subs]) => {
-      const collegeBreakdown: { [college: string]: number } = {};
-      const courseBreakdown: { [course: string]: number } = {};
-      const typeBreakdown: { [type: string]: number } = {};
-      const studentSubmissions: { [email: string]: Submission[] } = {};
+  const dayStats: DayStats[] = Object.entries(dayMap).map(([date, subs]) => {
+    const collegeBreakdown: { [college: string]: number } = {};
+    const courseBreakdown: { [course: string]: number } = {};
+    const typeBreakdown: { [type: string]: number } = {};
+    const studentSubmissions: { [email: string]: Submission[] } = {};
 
-      subs.forEach(sub => {
-        // College breakdown
-        const college = sub.userCollege || 'Unknown';
-        collegeBreakdown[college] = (collegeBreakdown[college] || 0) + 1;
+    subs.forEach(sub => {
+      const college = sub.userCollege || 'Unknown';
+      collegeBreakdown[college] = (collegeBreakdown[college] || 0) + 1;
 
-        // Course breakdown
-        const course = sub.userCourse || 'Unknown';
-        courseBreakdown[course] = (courseBreakdown[course] || 0) + 1;
+      const course = sub.userCourse || 'Unknown';
+      courseBreakdown[course] = (courseBreakdown[course] || 0) + 1;
 
-        // Type breakdown
-        const type = sub.type || 'Unknown';
-        typeBreakdown[type] = (typeBreakdown[type] || 0) + 1;
+      const type = sub.type || 'Unknown';
+      typeBreakdown[type] = (typeBreakdown[type] || 0) + 1;
 
-        // Student submissions breakdown
-        const email = sub.userEmail || 'unknown';
-        if (!studentSubmissions[email]) {
-          studentSubmissions[email] = [];
-        }
-        studentSubmissions[email].push(sub);
-      });
+      const email = sub.userEmail || 'unknown';
+      if (!studentSubmissions[email]) {
+        studentSubmissions[email] = [];
+      }
+      studentSubmissions[email].push(sub);
+    });
 
-      return {
-        date,
-        submissions: subs,
-        totalCount: subs.length,
-        collegeBreakdown,
-        courseBreakdown,
-        typeBreakdown,
-        studentSubmissions
-      };
-    })
-    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    return {
+      date,
+      submissions: subs,
+      totalCount: subs.length,
+      collegeBreakdown,
+      courseBreakdown,
+      typeBreakdown,
+      studentSubmissions,
+    };
+  }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   setDayWiseData(dayStats);
 };
+
 
 
   const loadSubmissions = async () => {
@@ -197,66 +202,77 @@ const AdminDashboard = () => {
     setExpandedDays(newExpanded);
   };
 
-const exportToExcel = () => {
-    // Import XLSX
-    
-    if (!XLSX) {
-      alert('Excel export functionality is not available. Please try again.');
-      return;
+const exportToExcel = async () => {
+  if (!XLSX) {
+    alert('Excel export functionality is not available. Please try again.');
+    return;
+  }
+
+  // 1. Build assignment map
+  const assignmentMap = new Map<string, any>();
+  const allAssignments = assignments.length > 0
+    ? assignments
+    : await assignmentService.getAllAssignments();
+  allAssignments.forEach((a: any) => assignmentMap.set(a.id, a));
+
+  // 2. Collect all assignment-created dates (not submission dates)
+  const allDates = [...new Set(
+    filteredSubmissions
+      .map(sub => {
+        const assignment = assignmentMap.get(sub.assignmentId);
+        return assignment?.createdAt?.seconds
+          ? new Date(assignment.createdAt.seconds * 1000).toDateString()
+          : null;
+      })
+      .filter(Boolean) as string[]
+  )].sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
+
+  // 3. Group by course
+  const courseGroups = filteredSubmissions.reduce((acc, sub) => {
+    const course = sub.userCourse || 'Unknown Course';
+    if (!acc[course]) {
+      acc[course] = [];
+    }
+    acc[course].push(sub);
+    return acc;
+  }, {} as { [course: string]: Submission[] });
+
+  const workbook = XLSX.utils.book_new();
+
+  // 4. Create sheets for each course
+  Object.entries(courseGroups).forEach(([courseName, courseSubmissions]) => {
+    const homeworkSubmissions = courseSubmissions.filter(sub => sub.type === 'homework');
+    const classworkSubmissions = courseSubmissions.filter(sub => sub.type === 'classwork');
+
+    // Homework Sheet
+    if (homeworkSubmissions.length > 0) {
+      const homeworkSheet = createCourseSheet(homeworkSubmissions, allDates, 'Homework');
+      const homeworkSheetName = `${courseName.substring(0, 20)}_HW`.replace(/[^\w\s]/gi, '');
+      XLSX.utils.book_append_sheet(workbook, homeworkSheet, homeworkSheetName);
     }
 
-    // Get all unique dates and sort them
-    const allDates = [...new Set(filteredSubmissions
-      .filter(sub => sub.createdAt?.seconds)
-      .map(sub => new Date(sub.createdAt!.seconds * 1000).toDateString())
-    )].sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
+    // Classwork Sheet
+    if (classworkSubmissions.length > 0) {
+      const classworkSheet = createCourseSheet(classworkSubmissions, allDates, 'Classwork');
+      const classworkSheetName = `${courseName.substring(0, 20)}_CW`.replace(/[^\w\s]/gi, '');
+      XLSX.utils.book_append_sheet(workbook, classworkSheet, classworkSheetName);
+    }
 
-    // Group submissions by course
-    const courseGroups = filteredSubmissions.reduce((acc, sub) => {
-      const course = sub.userCourse || 'Unknown Course';
-      if (!acc[course]) {
-        acc[course] = [];
-      }
-      acc[course].push(sub);
-      return acc;
-    }, {} as { [course: string]: Submission[] });
+    // Combined Sheet
+    const combinedSheet = createCourseSheet(courseSubmissions, allDates, 'All');
+    const combinedSheetName = `${courseName.substring(0, 25)}`.replace(/[^\w\s]/gi, '');
+    XLSX.utils.book_append_sheet(workbook, combinedSheet, combinedSheetName);
+  });
 
-    const workbook = XLSX.utils.book_new();
+  // 5. Summary sheet (uses assignment.createdAt for daily breakdown)
+  const summarySheet = createSummarySheet(filteredSubmissions, allDates, assignmentMap);
+  XLSX.utils.book_append_sheet(workbook, summarySheet, 'Summary');
 
-    // Create sheets for each course
-    Object.entries(courseGroups).forEach(([courseName, courseSubmissions]) => {
-      // Separate homework and classwork
-      const homeworkSubmissions = courseSubmissions.filter(sub => sub.type === 'homework');
-      const classworkSubmissions = courseSubmissions.filter(sub => sub.type === 'classwork');
+  // 6. Trigger download
+  const fileName = `submissions_${new Date().toISOString().split('T')[0]}.xlsx`;
+  XLSX.writeFile(workbook, fileName);
+};
 
-      // Create homework sheet
-      if (homeworkSubmissions.length > 0) {
-        const homeworkSheet = createCourseSheet(homeworkSubmissions, allDates, 'Homework');
-        const homeworkSheetName = `${courseName.substring(0, 20)}_HW`.replace(/[^\w\s]/gi, '');
-        XLSX.utils.book_append_sheet(workbook, homeworkSheet, homeworkSheetName);
-      }
-
-      // Create classwork sheet
-      if (classworkSubmissions.length > 0) {
-        const classworkSheet = createCourseSheet(classworkSubmissions, allDates, 'Classwork');
-        const classworkSheetName = `${courseName.substring(0, 20)}_CW`.replace(/[^\w\s]/gi, '');
-        XLSX.utils.book_append_sheet(workbook, classworkSheet, classworkSheetName);
-      }
-
-      // Create combined sheet for the course
-      const combinedSheet = createCourseSheet(courseSubmissions, allDates, 'All');
-      const combinedSheetName = `${courseName.substring(0, 25)}`.replace(/[^\w\s]/gi, '');
-      XLSX.utils.book_append_sheet(workbook, combinedSheet, combinedSheetName);
-    });
-
-    // Create overall summary sheet
-    const summarySheet = createSummarySheet(filteredSubmissions, allDates);
-    XLSX.utils.book_append_sheet(workbook, summarySheet, 'Summary');
-
-    // Write and download the file
-    const fileName = `submissions_${new Date().toISOString().split('T')[0]}.xlsx`;
-    XLSX.writeFile(workbook, fileName);
-  };
 
   const createCourseSheet = (submissions: Submission[], allDates: string[], type: string) => {
     
@@ -339,76 +355,81 @@ const exportToExcel = () => {
     return ws;
   };
 
-  const createSummarySheet = (submissions: Submission[], allDates: string[]) => {
-    
-    
-    // Calculate statistics
-    const totalSubmissions = submissions.length;
-    const totalStudents = new Set(submissions.map(s => s.userEmail)).size;
-    const totalColleges = new Set(submissions.map(s => s.userCollege)).size;
-    
-    // Course breakdown
-    const courseStats = submissions.reduce((acc, sub) => {
-      const course = sub.userCourse || 'Unknown';
-      acc[course] = (acc[course] || 0) + 1;
-      return acc;
-    }, {} as { [key: string]: number });
+  const createSummarySheet = (
+  submissions: Submission[],
+  allDates: string[],
+  assignmentMap: Map<string, any>
+) => {
+  // Calculate statistics
+  const totalSubmissions = submissions.length;
+  const totalStudents = new Set(submissions.map(s => s.userEmail)).size;
+  const totalColleges = new Set(submissions.map(s => s.userCollege)).size;
 
-    // College breakdown
-    const collegeStats = submissions.reduce((acc, sub) => {
-      const college = sub.userCollege || 'Unknown';
-      acc[college] = (acc[college] || 0) + 1;
-      return acc;
-    }, {} as { [key: string]: number });
+  // Course breakdown
+  const courseStats = submissions.reduce((acc, sub) => {
+    const course = sub.userCourse || 'Unknown';
+    acc[course] = (acc[course] || 0) + 1;
+    return acc;
+  }, {} as { [key: string]: number });
 
-    // Type breakdown
-    const typeStats = submissions.reduce((acc, sub) => {
-      const type = sub.type || 'Unknown';
-      acc[type] = (acc[type] || 0) + 1;
-      return acc;
-    }, {} as { [key: string]: number });
+  // College breakdown
+  const collegeStats = submissions.reduce((acc, sub) => {
+    const college = sub.userCollege || 'Unknown';
+    acc[college] = (acc[college] || 0) + 1;
+    return acc;
+  }, {} as { [key: string]: number });
 
-    // Daily breakdown
-    const dailyStats = allDates.map(date => {
-      const daySubmissions = submissions.filter(sub => 
-        sub.createdAt?.seconds && 
-        new Date(sub.createdAt.seconds * 1000).toDateString() === date
-      );
-      return [date, daySubmissions.length];
+  // Type breakdown
+  const typeStats = submissions.reduce((acc, sub) => {
+    const type = sub.type || 'Unknown';
+    acc[type] = (acc[type] || 0) + 1;
+    return acc;
+  }, {} as { [key: string]: number });
+
+  // Daily breakdown by assignment creation date
+  const dailyStats = allDates.map(date => {
+    const daySubmissions = submissions.filter(sub => {
+      const assignment = assignmentMap.get(sub.assignmentId);
+      if (!assignment?.createdAt?.seconds) return false;
+      const assignDate = new Date(assignment.createdAt.seconds * 1000).toDateString();
+      return assignDate === date;
     });
+    return [date, daySubmissions.length];
+  });
 
-    // Build summary data
-    const summaryData = [
-      ['SUBMISSION SUMMARY REPORT'],
-      ['Generated on:', new Date().toLocaleString()],
-      [''],
-      ['OVERVIEW'],
-      ['Total Submissions:', totalSubmissions],
-      ['Total Students:', totalStudents],
-      ['Total Colleges:', totalColleges],
-      ['Date Range:', allDates.length > 0 ? `${allDates[0]} to ${allDates[allDates.length - 1]}` : 'No dates'],
-      [''],
-      ['SUBMISSIONS BY COURSE'],
-      ...Object.entries(courseStats).map(([course, count]) => [course, count]),
-      [''],
-      ['SUBMISSIONS BY COLLEGE'],
-      ...Object.entries(collegeStats).map(([college, count]) => [college, count]),
-      [''],
-      ['SUBMISSIONS BY TYPE'],
-      ...Object.entries(typeStats).map(([type, count]) => [type, count]),
-      [''],
-      ['DAILY BREAKDOWN'],
-      ['Date', 'Submissions'],
-      ...dailyStats
-    ];
+  // Build summary data
+  const summaryData = [
+    ['SUBMISSION SUMMARY REPORT'],
+    ['Generated on:', new Date().toLocaleString()],
+    [''],
+    ['OVERVIEW'],
+    ['Total Submissions:', totalSubmissions],
+    ['Total Students:', totalStudents],
+    ['Total Colleges:', totalColleges],
+    ['Date Range:', allDates.length > 0 ? `${allDates[0]} to ${allDates[allDates.length - 1]}` : 'No dates'],
+    [''],
+    ['SUBMISSIONS BY COURSE'],
+    ...Object.entries(courseStats).map(([course, count]) => [course, count]),
+    [''],
+    ['SUBMISSIONS BY COLLEGE'],
+    ...Object.entries(collegeStats).map(([college, count]) => [college, count]),
+    [''],
+    ['SUBMISSIONS BY TYPE'],
+    ...Object.entries(typeStats).map(([type, count]) => [type, count]),
+    [''],
+    ['DAILY BREAKDOWN'],
+    ['Date', 'Submissions'],
+    ...dailyStats
+  ];
 
-    const ws = XLSX.utils.aoa_to_sheet(summaryData);
-    
-    // Auto-size columns
-    ws['!cols'] = [{ width: 30 }, { width: 20 }];
+  const ws = XLSX.utils.aoa_to_sheet(summaryData);
 
-    return ws;
-  };
+  // Auto-size columns
+  ws['!cols'] = [{ width: 30 }, { width: 20 }];
+
+  return ws;
+};
+
   if (!isLoggedIn) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
