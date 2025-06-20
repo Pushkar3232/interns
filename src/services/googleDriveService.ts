@@ -21,7 +21,7 @@ export const requestDriveAccessToken = async (clientId: string): Promise<string>
   return new Promise((resolve, reject) => {
     const tokenClient = window.google.accounts.oauth2.initTokenClient({
       client_id: clientId,
-      scope: "https://www.googleapis.com/auth/drive", // ✅ Use full Drive access
+      scope: "https://www.googleapis.com/auth/drive.file", // ✅ Use full Drive access
       callback: (response) => {
         if (response.error) {
           console.error("❌ Failed to get access token", response);
