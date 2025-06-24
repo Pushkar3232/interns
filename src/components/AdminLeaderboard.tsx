@@ -1,6 +1,6 @@
 // src/components/AdminLeaderboard.tsx
 import { useEffect, useState, useCallback } from "react";
-import { leaderboardService, LeaderboardEntry } from "@/services/leaderboardService";
+import { optimizedLeaderboardService, LeaderboardEntry } from "@/services/optimizedLeaderboardService";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -22,7 +22,7 @@ const AdminLeaderboard = () => {
   const [loading, setLoading] = useState(true);
   const [statsLoading, setStatsLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [hasMore, setHasMore] = useState(true);
+
   const [selectedCourse, setSelectedCourse] = useState("Web Development");
   const [currentPage, setCurrentPage] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -50,15 +50,17 @@ const AdminLeaderboard = () => {
       console.log("🚀 Loading initial data for:", selectedCourse);
       
       // ✅ OPTIMIZATION: Load data in parallel but with error handling
-      const [leaderboardData, statsData] = await Promise.allSettled([
-        leaderboardService.getTopStudents(selectedCourse, ITEMS_PER_PAGE),
-        leaderboardService.getLeaderboardStats(selectedCourse)
-      ]);
+      const courseId = selectedCourse.replace(/\s+/g, '_');
+const [leaderboardData, statsData] = await Promise.allSettled([
+  optimizedLeaderboardService.getTopStudents(courseId, 10),
+  optimizedLeaderboardService.getLeaderboardStats(courseId)
+]);
+
       
       // Handle leaderboard data
       if (leaderboardData.status === 'fulfilled') {
         setLeaderboard(leaderboardData.value);
-        setHasMore(leaderboardData.value.length === ITEMS_PER_PAGE);
+       
       } else {
         console.error("Leaderboard load failed:", leaderboardData.reason);
         setLeaderboard([]);
@@ -90,43 +92,7 @@ const AdminLeaderboard = () => {
     loadInitialData();
   }, [loadInitialData]);
 
-  // ✅ OPTIMIZATION: Improved load more with better error handling
-  const loadMoreStudents = async () => {
-    if (!hasMore || loadingMore || !selectedCourse) return;
-    
-    setLoadingMore(true);
-    try {
-      const nextPage = currentPage + 1;
-      const skip = nextPage * ITEMS_PER_PAGE;
-      
-      console.log(`📄 Loading more students: page ${nextPage}, skip ${skip}`);
-      
-      const moreData = await leaderboardService.getMoreStudents(
-        selectedCourse, 
-        skip, 
-        ITEMS_PER_PAGE
-      );
-      
-      if (moreData.length > 0) {
-        setLeaderboard(prev => {
-          // Prevent duplicates
-          const existingIds = new Set(prev.map(item => item.id));
-          const newItems = moreData.filter(item => !existingIds.has(item.id));
-          return [...prev, ...newItems];
-        });
-        setCurrentPage(nextPage);
-        setHasMore(moreData.length === ITEMS_PER_PAGE);
-      } else {
-        setHasMore(false);
-      }
-    } catch (error) {
-      console.error("Error loading more students:", error);
-      setHasMore(false);
-      setError("Failed to load more students");
-    } finally {
-      setLoadingMore(false);
-    }
-  };
+
 
   // ✅ OPTIMIZATION: Smart refresh with cache clearing
   const refreshData = async () => {
@@ -141,7 +107,7 @@ const AdminLeaderboard = () => {
     
     setSelectedCourse(newCourse);
     // Preload data for the new course
-    leaderboardService.preloadData(newCourse);
+    optimizedLeaderboardService.clearCache(newCourse);
   };
 
   const getRankIcon = (rank: number) => {
@@ -315,53 +281,31 @@ const AdminLeaderboard = () => {
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {leaderboard.map((entry, index) => (
-                      <tr key={entry.email} className="bg-white group animate-fade-in-up hover:bg-slate-50" style={getRowAnimation(index)}>
+                      <tr key={entry.userEmail} className="bg-white group animate-fade-in-up hover:bg-slate-50" style={getRowAnimation(index)}>
                         <td className="px-6 py-4">
                           <div className={`w-10 h-10 rounded-full flex items-center justify-center ${getRankBadgeColor(index + 1)}`}>
                             {getRankIcon(index + 1)}
                           </div>
                         </td>
                         <td className="px-6 py-4">
-                          <div className="text-sm font-semibold text-slate-900">{entry.name}</div>
-                          <div className="text-sm text-slate-500">{entry.email}</div>
+                          <div className="text-sm font-semibold text-slate-900">{entry.userName}</div>
+                          <div className="text-sm text-slate-500">{entry.userEmail}</div>
                         </td>
                         <td className="px-6 py-4">
-                          <span className="text-sm text-slate-700">{entry.college || 'N/A'}</span>
+                          <span className="text-sm text-slate-700">{entry.userCollege || 'N/A'}</span>
                         </td>
                         <td className="px-6 py-4">
-                          <span className="text-sm font-medium text-slate-900">{Math.round(entry.avgMinutes * 60)}s</span>
+                          <span className="text-sm font-medium text-slate-900">{Math.round(entry.averageSeconds)}s</span>
                         </td>
                         <td className="px-6 py-4">
-                          <span className="text-sm font-medium text-slate-900">{entry.count}</span>
+                          <span className="text-sm font-medium text-slate-900">{entry.totalSubmissions}</span>
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
                 
-                {/* ✅ OPTIMIZATION: Load More Button with better UX */}
-                {hasMore && !loading && (
-                  <div className="p-6 text-center border-t">
-                    <Button 
-                      onClick={loadMoreStudents}
-                      disabled={loadingMore}
-                      variant="outline"
-                      className="w-full sm:w-auto"
-                    >
-                      {loadingMore ? (
-                        <>
-                          <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                          Loading...
-                        </>
-                      ) : (
-                        <>
-                          <ChevronDown className="w-4 h-4 mr-2" />
-                          Load More Students ({ITEMS_PER_PAGE} more)
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                )}
+                
                 
                 {leaderboard.length === 0 && !loading && (
                   <div className="text-center py-12">

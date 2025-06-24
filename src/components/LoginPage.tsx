@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useFirebaseAuth } from "@/hooks/useFirebaseAuth";
-import { collectionGroup, doc, getDoc, getDocs } from "firebase/firestore";
+import { doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 
 const LoginPage = () => {
@@ -15,31 +15,33 @@ const LoginPage = () => {
 
       if (!user?.uid) throw new Error("Missing UID");
 
-      // 🔍 Search user in any course under /users/{course}/students/{uid}
+      // 🔍 Search user in the new structure: /users/{course}/students/{uid}
       const courses = ["Web Development", "Data Analysis", "Mobile Application Development"];
       let found = false;
       let profileData: any = null;
 
       for (const course of courses) {
-        const ref = doc(db, `users/${course}/students/${user.uid}`);
+        const ref = doc(db, "users", course, "students", user.uid);
         const snap = await getDoc(ref);
         if (snap.exists()) {
           found = true;
           profileData = snap.data();
+          console.log(`✅ Found user in ${course}:`, profileData);
           break;
         }
       }
 
+      // Check if profile is complete
       if (
         found &&
         profileData?.name &&
         profileData?.college &&
         profileData?.course
       ) {
-        console.log("✅ Profile complete:", profileData);
+        console.log("✅ Profile complete, redirecting to dashboard");
         window.location.href = "/dashboard";
       } else {
-        console.log("🔁 Redirecting to complete-profile");
+        console.log("🔁 Profile incomplete or not found, redirecting to complete-profile");
         window.location.href = "/complete-profile";
       }
 
@@ -48,7 +50,6 @@ const LoginPage = () => {
       alert("Login failed. See console for details.");
     }
   };
-
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-blue-50 to-indigo-100">

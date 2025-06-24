@@ -8,7 +8,7 @@ import AssignmentForm from "@/components/AssignmentForm";
 import { assignmentService } from "@/services/assignmentService";
 
 
-// import AdminLeaderboard from "@/components/AdminLeaderboard";
+import AdminLeaderboard from "@/components/AdminLeaderboard";
 import * as XLSX from 'xlsx';
 import { 
   Calendar, 
@@ -59,7 +59,7 @@ const AdminDashboard = () => {
   const [dateRange, setDateRange] = useState({ start: "", end: "" });
 
   // View state
-  const [activeTab, setActiveTab] = useState<"daily" | "overview"  | "assignments">("daily");
+  const [activeTab, setActiveTab] = useState<"daily" | "overview" | "assignments" | "leaderboard">("assignments");
 
 
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
@@ -552,12 +552,12 @@ const createSummarySheet = (
   >
     📚 Assignments
   </Button>
-  {/* <Button
+  <Button
     variant={activeTab === "leaderboard" ? "default" : "outline"}
     onClick={() => setActiveTab("leaderboard")}
   >
     🏅 Leaderboard
-  </Button> */}
+  </Button>
 </div>
 
             </div>
@@ -1040,12 +1040,12 @@ const createSummarySheet = (
   </>
 )}
 
-{/* {activeTab === "leaderboard" && (
+{activeTab === "leaderboard" && (
   <>
     <h2 className="text-xl font-bold mb-4">🏅 Leaderboard</h2>
     <AdminLeaderboard />
   </>
-)} */}
+)}
       </div>
 
       {/* Loading Overlay */}

@@ -29,7 +29,8 @@ export default function CompleteProfilePage() {
     if (!user) return;
     setLoading(true);
     try {
-      await setDoc(doc(db, "users", user.uid), {
+      // Store user in the new structure: users/{course}/students/{uid}
+      await setDoc(doc(db, "users", course, "students", user.uid), {
         name,
         college,
         course,
@@ -76,7 +77,7 @@ export default function CompleteProfilePage() {
             className="w-full border p-2 rounded"
           >
             {internshipOptions.map((option) => (
-              <option key={option}>{option}</option>
+              <option key={option} value={option}>{option}</option>
             ))}
           </select>
           <Button onClick={handleSubmit} disabled={loading} className="w-full">

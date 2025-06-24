@@ -22,11 +22,24 @@ const StudentLeaderboard = ({ userId, userCourse, userEmail }: StudentLeaderboar
   const [currentUserData, setCurrentUserData] = useState<LeaderboardEntry | null>(null);
 
   const courses = ["Web Development", "Data Analysis", "Mobile Application Development"];
+const [myRank, setMyRank] = useState<{ rank: number; total: number; userData?: LeaderboardEntry }>({
+  rank: 0,
+  total: 0,
+});
 
   useEffect(() => {
     loadLeaderboardData();
   }, [showAllCourses, userCourse]);
 
+useEffect(() => {
+  const fetchUserRank = async () => {
+    const courseId = userCourse.replace(/\s+/g, "_");
+    const rankResult = await optimizedLeaderboardService.getUserRank(userId, courseId);
+    setMyRank(rankResult); // You'll need to define setMyRank with useState
+  };
+
+  fetchUserRank();
+}, [userId, userCourse]);
 
 
  const loadLeaderboardData = async () => {
@@ -66,6 +79,7 @@ const StudentLeaderboard = ({ userId, userCourse, userEmail }: StudentLeaderboar
       // Use normalized course ID
       const courseId = userCourse.replace(/\s+/g, '_');
       const courseData = await optimizedLeaderboardService.getTopStudents(courseId, 10);
+
       setLeaderboard(courseData);
       
       // Get current user's rank in their course
@@ -140,47 +154,48 @@ const StudentLeaderboard = ({ userId, userCourse, userEmail }: StudentLeaderboar
       </div>
 
       {/* Your Rank Card */}
-      {currentUserData && (
-        <Card className="bg-gradient-to-r from-blue-50 to-purple-50 border-2 border-blue-200 shadow-lg">
-          <CardContent className="p-4 sm:p-6">
-            <div className="text-center space-y-3">
-              <div className="flex items-center justify-center gap-2">
-                <Star className="w-5 h-5 text-yellow-500" />
-                <span className="text-lg sm:text-xl font-bold text-slate-800">Your Rank</span>
-              </div>
-              
-              <div className="flex items-center justify-center gap-4 flex-wrap">
-                <div className={`inline-flex items-center justify-center w-12 h-12 sm:w-14 sm:h-14 rounded-full ${getRankBadgeColor(currentUserRank)} text-lg sm:text-xl font-bold`}>
-                  {currentUserRank <= 3 ? getRankIcon(currentUserRank) : `#${currentUserRank}`}
-                </div>
-                <div className="text-center">
-                  <p className="text-lg sm:text-xl font-semibold text-slate-900">{currentUserData.userName}</p>
-                  <span className={`inline-block px-2 py-1 rounded-full text-xs sm:text-sm font-medium ${getCourseColor(currentUserData.userCourse)}`}>
-                    {currentUserData.userCourse}
-                  </span>
-                </div>
-              </div>
+{myRank.userData && (
+  <Card className="bg-gradient-to-r from-blue-50 to-purple-50 border-2 border-blue-200 shadow-lg">
+    <CardContent className="p-4 sm:p-6">
+      <div className="text-center space-y-3">
+        <div className="flex items-center justify-center gap-2">
+          <Star className="w-5 h-5 text-yellow-500" />
+          <span className="text-lg sm:text-xl font-bold text-slate-800">Your Rank</span>
+        </div>
+        
+        <div className="flex items-center justify-center gap-4 flex-wrap">
+          <div className={`inline-flex items-center justify-center w-12 h-12 sm:w-14 sm:h-14 rounded-full ${getRankBadgeColor(myRank.rank)} text-lg sm:text-xl font-bold`}>
+            {myRank.rank <= 3 ? getRankIcon(myRank.rank) : `#${myRank.rank}`}
+          </div>
+          <div className="text-center">
+            <p className="text-lg sm:text-xl font-semibold text-slate-900">{myRank.userData.userName}</p>
+            <span className={`inline-block px-2 py-1 rounded-full text-xs sm:text-sm font-medium ${getCourseColor(myRank.userData.userCourse)}`}>
+              {myRank.userData.userCourse}
+            </span>
+          </div>
+        </div>
 
-              <div className="grid grid-cols-2 gap-4 mt-4">
-                <div className="text-center">
-                  <div className="flex items-center justify-center gap-1 text-slate-600">
-                    <Clock className="w-4 h-4" />
-                    <span className="text-sm">Avg Time</span>
-                  </div>
-                  <p className="text-xl sm:text-2xl font-bold text-slate-900">{currentUserData.averageSeconds}s</p>
-                </div>
-                <div className="text-center">
-                  <div className="flex items-center justify-center gap-1 text-slate-600">
-                    <FileText className="w-4 h-4" />
-                    <span className="text-sm">Submissions</span>
-                  </div>
-                  <p className="text-xl sm:text-2xl font-bold text-slate-900">{currentUserData.totalSubmissions}</p>
-                </div>
-              </div>
+        <div className="grid grid-cols-2 gap-4 mt-4">
+          <div className="text-center">
+            <div className="flex items-center justify-center gap-1 text-slate-600">
+              <Clock className="w-4 h-4" />
+              <span className="text-sm">Avg Time</span>
             </div>
-          </CardContent>
-        </Card>
-      )}
+            <p className="text-xl sm:text-2xl font-bold text-slate-900">{myRank.userData.averageSeconds}s</p>
+          </div>
+          <div className="text-center">
+            <div className="flex items-center justify-center gap-1 text-slate-600">
+              <FileText className="w-4 h-4" />
+              <span className="text-sm">Submissions</span>
+            </div>
+            <p className="text-xl sm:text-2xl font-bold text-slate-900">{myRank.userData.totalSubmissions}</p>
+          </div>
+        </div>
+      </div>
+    </CardContent>
+  </Card>
+)}
+
 
       {/* Main Leaderboard */}
       <Card className="shadow-xl border-0 bg-white/90 backdrop-blur-sm">
@@ -190,14 +205,7 @@ const StudentLeaderboard = ({ userId, userCourse, userEmail }: StudentLeaderboar
               <Award className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600" />
               Rankings
             </CardTitle>
-            <div className="flex items-center space-x-2">
-              <Label className="text-sm text-slate-700">All Courses</Label>
-              <Switch
-                checked={showAllCourses}
-                onCheckedChange={setShowAllCourses}
-                className="data-[state=checked]:bg-blue-600"
-              />
-            </div>
+            
           </div>
         </CardHeader>
         <CardContent className="p-0">
@@ -358,12 +366,7 @@ const StudentLeaderboard = ({ userId, userCourse, userEmail }: StudentLeaderboar
 
       {/* Performance Footer */}
       <div className="text-center space-y-2 p-4">
-        <div className="flex items-center justify-center gap-1">
-          <Target className="w-4 h-4 text-green-500" />
-          <span className="text-sm font-medium text-slate-700">
-            Optimized for performance • {showAllCourses ? '3' : '1'} Firebase read{showAllCourses ? 's' : ''}
-          </span>
-        </div>
+        
         <div className="flex items-center justify-center gap-1">
           <Zap className="w-4 h-4 text-yellow-500" />
           <span className="text-sm font-medium text-slate-700">Keep pushing forward!</span>
