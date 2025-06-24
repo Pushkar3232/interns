@@ -1,31 +1,53 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useFirebaseAuth } from "@/hooks/useFirebaseAuth";
-import { doc, getDoc } from "firebase/firestore";
+import { collectionGroup, doc, getDoc, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 
 const LoginPage = () => {
   const { signInWithGoogle, loading } = useFirebaseAuth();
 
   const handleGoogleLogin = async () => {
-  try {
-    console.log("Attempting login...");
-    const user = await signInWithGoogle();
-    console.log("Login success:", user);
+    try {
+      console.log("Attempting login...");
+      const user = await signInWithGoogle();
+      console.log("Login success:", user);
 
-    const userRef = doc(db, "users", user.uid);
-    const docSnap = await getDoc(userRef);
-    console.log("User doc exists?", docSnap.exists());
+      if (!user?.uid) throw new Error("Missing UID");
 
-    if (!docSnap.exists()) {
-      window.location.href = "/complete-profile";
-    } else {
-      window.location.href = "/dashboard";
+      // 🔍 Search user in any course under /users/{course}/students/{uid}
+      const courses = ["Web Development", "Data Analysis", "Mobile Application Development"];
+      let found = false;
+      let profileData: any = null;
+
+      for (const course of courses) {
+        const ref = doc(db, `users/${course}/students/${user.uid}`);
+        const snap = await getDoc(ref);
+        if (snap.exists()) {
+          found = true;
+          profileData = snap.data();
+          break;
+        }
+      }
+
+      if (
+        found &&
+        profileData?.name &&
+        profileData?.college &&
+        profileData?.course
+      ) {
+        console.log("✅ Profile complete:", profileData);
+        window.location.href = "/dashboard";
+      } else {
+        console.log("🔁 Redirecting to complete-profile");
+        window.location.href = "/complete-profile";
+      }
+
+    } catch (error) {
+      console.error("Login error:", error);
+      alert("Login failed. See console for details.");
     }
-  } catch (error) {
-    console.error("Login error:", error);
-  }
-};
+  };
 
 
   return (

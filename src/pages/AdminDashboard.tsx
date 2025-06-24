@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
-import { submissionService, Submission } from "@/services/submissionService";
+import { submissionService, Submission,getLatestSubmissions } from "@/services/submissionService";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { COLLEGES } from "@/constants/colleges";
 import AssignmentForm from "@/components/AssignmentForm";
 import { assignmentService } from "@/services/assignmentService";
-import AdminLeaderboard from "@/components/AdminLeaderboard";
+
+
+// import AdminLeaderboard from "@/components/AdminLeaderboard";
 import * as XLSX from 'xlsx';
 import { 
   Calendar, 
@@ -24,6 +26,7 @@ import {
   CheckCircle,
   AlertCircle
 } from "lucide-react";
+
 
 const COURSES = ["Web Development", "Data Analysis", "Mobile Application Development"];
 
@@ -50,13 +53,13 @@ const AdminDashboard = () => {
 
   // Filters
   const [collegeFilter, setCollegeFilter] = useState("");
-  const [courseFilter, setCourseFilter] = useState("");
+  const [courseFilter, setCourseFilter] = useState("Web Development"); // default
   const [typeFilter, setTypeFilter] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [dateRange, setDateRange] = useState({ start: "", end: "" });
 
   // View state
-  const [activeTab, setActiveTab] = useState<"daily" | "overview"  | "assignments" | "leaderboard">("daily");
+  const [activeTab, setActiveTab] = useState<"daily" | "overview"  | "assignments">("daily");
 
 
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
@@ -69,28 +72,38 @@ const AdminDashboard = () => {
     }
   };
 
-  const processSubmissionsData = async (submissions: Submission[]) => {
+ const processSubmissionsData = async (submissions: Submission[]) => {
   const dayMap: { [day: string]: Submission[] } = {};
 
-  // Load all assignments for lookup
-  const assignmentMap = new Map<string, any>();
+  // 🔸 Load all assignments if not available
+  let allAssignments = assignments;
   if (assignments.length === 0) {
-    const fetchedAssignments = await assignmentService.getAllAssignments();
-    setAssignments(fetchedAssignments);
-    fetchedAssignments.forEach((a: any) => assignmentMap.set(a.id, a));
-  } else {
-    assignments.forEach((a: any) => assignmentMap.set(a.id, a));
+    allAssignments = await assignmentService.getAllAssignments();
+    setAssignments(allAssignments);
   }
 
+  const assignmentMap = new Map<string, any>();
+  allAssignments.forEach(a => assignmentMap.set(a.id, a));
+
   for (const sub of submissions) {
-    const assignment = assignmentMap.get(sub.assignmentId);
-    if (!assignment?.createdAt?.seconds) continue;
-
-    const assignDate = new Date(assignment.createdAt.seconds * 1000).toDateString();
-
-    if (!dayMap[assignDate]) {
-      dayMap[assignDate] = [];
+    // ✅ NEW: Use assignmentCreatedAt from submission data (which comes from the collection structure)
+    let assignDate = "Unknown";
+    
+    if (sub.assignmentCreatedAt?.seconds) {
+      // Use the assignmentCreatedAt timestamp from the submission
+      assignDate = new Date(sub.assignmentCreatedAt.seconds * 1000).toDateString();
+    } else {
+      // Fallback: try to get from assignment map
+      const assignment = assignmentMap.get(sub.assignmentId);
+      if (assignment?.createdAt?.seconds) {
+        assignDate = new Date(assignment.createdAt.seconds * 1000).toDateString();
+      } else if (sub.createdAt?.seconds) {
+        // Last fallback: use submission creation date
+        assignDate = new Date(sub.createdAt.seconds * 1000).toDateString();
+      }
     }
+
+    if (!dayMap[assignDate]) dayMap[assignDate] = [];
     dayMap[assignDate].push(sub);
   }
 
@@ -102,18 +115,15 @@ const AdminDashboard = () => {
 
     subs.forEach(sub => {
       const college = sub.userCollege || 'Unknown';
-      collegeBreakdown[college] = (collegeBreakdown[college] || 0) + 1;
-
       const course = sub.userCourse || 'Unknown';
-      courseBreakdown[course] = (courseBreakdown[course] || 0) + 1;
-
       const type = sub.type || 'Unknown';
+      const email = sub.userEmail || 'unknown';
+
+      collegeBreakdown[college] = (collegeBreakdown[college] || 0) + 1;
+      courseBreakdown[course] = (courseBreakdown[course] || 0) + 1;
       typeBreakdown[type] = (typeBreakdown[type] || 0) + 1;
 
-      const email = sub.userEmail || 'unknown';
-      if (!studentSubmissions[email]) {
-        studentSubmissions[email] = [];
-      }
+      if (!studentSubmissions[email]) studentSubmissions[email] = [];
       studentSubmissions[email].push(sub);
     });
 
@@ -124,7 +134,7 @@ const AdminDashboard = () => {
       collegeBreakdown,
       courseBreakdown,
       typeBreakdown,
-      studentSubmissions,
+      studentSubmissions
     };
   }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
@@ -132,28 +142,30 @@ const AdminDashboard = () => {
 };
 
 
-
   const loadSubmissions = async () => {
-    setLoading(true);
-    try {
-      const all = await submissionService.getAllSubmissions();
-      setAllSubmissions(all);
-      setFilteredSubmissions(all);
-      processSubmissionsData(all);
-    } catch (error) {
-      console.error('Error loading submissions:', error);
-      alert('❌ Error loading submissions. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
+  if (!courseFilter) return;
+
+  setLoading(true);
+  try {
+    const all = await getLatestSubmissions(courseFilter);
+    console.log("Got submissions:", all.length);
+    setAllSubmissions(all);
+    setFilteredSubmissions(all);
+    processSubmissionsData(all);
+  } catch (error) {
+    console.error("Error:", error);
+  } finally {
+    setLoading(false);
+  }
+};
+
 
   useEffect(() => {
-    if (isLoggedIn) {
-      loadSubmissions();
-      assignmentService.getAllAssignments().then(setAssignments);
-    }
-  }, [isLoggedIn]);
+  if (isLoggedIn && courseFilter) {
+    loadSubmissions();
+  }
+}, [isLoggedIn, courseFilter]);
+
 
   useEffect(() => {
     let filtered = allSubmissions;
@@ -215,14 +227,22 @@ const exportToExcel = async () => {
     : await assignmentService.getAllAssignments();
   allAssignments.forEach((a: any) => assignmentMap.set(a.id, a));
 
-  // 2. Collect all assignment-created dates (not submission dates)
+  // 2. ✅ NEW: Collect dates using assignmentCreatedAt from submissions
   const allDates = [...new Set(
     filteredSubmissions
       .map(sub => {
+        // Priority 1: Use assignmentCreatedAt from submission
+        if (sub.assignmentCreatedAt?.seconds) {
+          return new Date(sub.assignmentCreatedAt.seconds * 1000).toDateString();
+        }
+        
+        // Priority 2: Fallback to assignment map
         const assignment = assignmentMap.get(sub.assignmentId);
-        return assignment?.createdAt?.seconds
-          ? new Date(assignment.createdAt.seconds * 1000).toDateString()
-          : null;
+        if (assignment?.createdAt?.seconds) {
+          return new Date(assignment.createdAt.seconds * 1000).toDateString();
+        }
+        
+        return null;
       })
       .filter(Boolean) as string[]
   )].sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
@@ -264,7 +284,7 @@ const exportToExcel = async () => {
     XLSX.utils.book_append_sheet(workbook, combinedSheet, combinedSheetName);
   });
 
-  // 5. Summary sheet (uses assignment.createdAt for daily breakdown)
+  // 5. ✅ NEW: Updated summary sheet
   const summarySheet = createSummarySheet(filteredSubmissions, allDates, assignmentMap);
   XLSX.utils.book_append_sheet(workbook, summarySheet, 'Summary');
 
@@ -273,8 +293,7 @@ const exportToExcel = async () => {
   XLSX.writeFile(workbook, fileName);
 };
 
-
-  const createCourseSheet = (
+const createCourseSheet = (
   submissions: Submission[],
   allDates: string[],
   type: string,
@@ -295,14 +314,25 @@ const exportToExcel = async () => {
     return acc;
   }, {} as { [email: string]: { name: string; college: string; email: string } });
 
-  // Create submission map based on assignment creation date
+  // ✅ NEW: Create submission map using assignmentCreatedAt
   const submissionMap = submissions.reduce((acc, sub) => {
     if (!sub.userEmail || !sub.assignmentId) return acc;
 
-    const assignment = assignmentMap.get(sub.assignmentId);
-    if (!assignment?.createdAt?.seconds) return acc;
+    let date: string | null = null;
+    
+    // Priority 1: Use assignmentCreatedAt from submission
+    if (sub.assignmentCreatedAt?.seconds) {
+      date = new Date(sub.assignmentCreatedAt.seconds * 1000).toDateString();
+    } else {
+      // Priority 2: Fallback to assignment map
+      const assignment = assignmentMap.get(sub.assignmentId);
+      if (assignment?.createdAt?.seconds) {
+        date = new Date(assignment.createdAt.seconds * 1000).toDateString();
+      }
+    }
 
-    const date = new Date(assignment.createdAt.seconds * 1000).toDateString();
+    if (!date) return acc;
+
     const key = `${sub.userEmail}-${date}`;
     if (!acc[key]) {
       acc[key] = [];
@@ -348,9 +378,7 @@ const exportToExcel = async () => {
 
   return ws;
 };
-
-
-  const createSummarySheet = (
+const createSummarySheet = (
   submissions: Submission[],
   allDates: string[],
   assignmentMap: Map<string, any>
@@ -381,13 +409,23 @@ const exportToExcel = async () => {
     return acc;
   }, {} as { [key: string]: number });
 
-  // Daily breakdown by assignment creation date
+  // ✅ NEW: Daily breakdown using assignmentCreatedAt
   const dailyStats = allDates.map(date => {
     const daySubmissions = submissions.filter(sub => {
+      // Priority 1: Use assignmentCreatedAt from submission
+      if (sub.assignmentCreatedAt?.seconds) {
+        const assignDate = new Date(sub.assignmentCreatedAt.seconds * 1000).toDateString();
+        return assignDate === date;
+      }
+      
+      // Priority 2: Fallback to assignment map
       const assignment = assignmentMap.get(sub.assignmentId);
-      if (!assignment?.createdAt?.seconds) return false;
-      const assignDate = new Date(assignment.createdAt.seconds * 1000).toDateString();
-      return assignDate === date;
+      if (assignment?.createdAt?.seconds) {
+        const assignDate = new Date(assignment.createdAt.seconds * 1000).toDateString();
+        return assignDate === date;
+      }
+      
+      return false;
     });
     return [date, daySubmissions.length];
   });
@@ -412,7 +450,7 @@ const exportToExcel = async () => {
     ['SUBMISSIONS BY TYPE'],
     ...Object.entries(typeStats).map(([type, count]) => [type, count]),
     [''],
-    ['DAILY BREAKDOWN'],
+    ['DAILY BREAKDOWN (by Assignment Creation Date)'],
     ['Date', 'Submissions'],
     ...dailyStats
   ];
@@ -428,6 +466,7 @@ const exportToExcel = async () => {
   if (!isLoggedIn) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
+       
         <Card className="w-full max-w-md shadow-2xl border-0">
           <CardHeader className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-t-lg">
             <CardTitle className="text-center text-2xl font-bold flex items-center justify-center gap-2">
@@ -502,12 +541,12 @@ const exportToExcel = async () => {
   >
     📚 Assignments
   </Button>
-  <Button
+  {/* <Button
     variant={activeTab === "leaderboard" ? "default" : "outline"}
     onClick={() => setActiveTab("leaderboard")}
   >
     🏅 Leaderboard
-  </Button>
+  </Button> */}
 </div>
 
             </div>
@@ -627,15 +666,16 @@ const exportToExcel = async () => {
               </select>
 
               <select
-                value={courseFilter}
-                onChange={e => setCourseFilter(e.target.value)}
-                className="border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">All Courses</option>
-                {COURSES.map(course => (
-                  <option key={course} value={course}>{course}</option>
-                ))}
-              </select>
+              className="border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+  value={courseFilter}
+  onChange={e => setCourseFilter(e.target.value)}
+  
+>
+  <option value="Web Development">Web Development</option>
+  <option value="Data Analysis">Data Analysis</option>
+  <option value="Mobile Application Development">Mobile App Dev</option>
+</select>
+
 
               <select
                 value={typeFilter}
@@ -989,12 +1029,12 @@ const exportToExcel = async () => {
   </>
 )}
 
-{activeTab === "leaderboard" && (
+{/* {activeTab === "leaderboard" && (
   <>
     <h2 className="text-xl font-bold mb-4">🏅 Leaderboard</h2>
     <AdminLeaderboard />
   </>
-)}
+)} */}
       </div>
 
       {/* Loading Overlay */}

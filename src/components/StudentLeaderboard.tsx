@@ -1,13 +1,12 @@
 // src/components/StudentLeaderboard.tsx
 import { useEffect, useState } from "react";
-import { calculateLeaderboard } from "@/services/leaderboardService.ts";
-import { submissionService } from "@/services/submissionService";
-import { assignmentService } from "@/services/assignmentService";
+import { optimizedLeaderboardService, LeaderboardEntry } from "@/services/optimizedLeaderboardService";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Trophy, Medal, Award, Users, Clock, FileText, Crown, Star, Zap, Target } from "lucide-react";
+import { submissionService } from "@/services/submissionService";
 
 interface StudentLeaderboardProps {
   userId: string;
@@ -16,32 +15,75 @@ interface StudentLeaderboardProps {
 }
 
 const StudentLeaderboard = ({ userId, userCourse, userEmail }: StudentLeaderboardProps) => {
-  const [leaderboard, setLeaderboard] = useState<any[]>([]);
+  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAllCourses, setShowAllCourses] = useState(false);
+  const [currentUserRank, setCurrentUserRank] = useState<number>(0);
+  const [currentUserData, setCurrentUserData] = useState<LeaderboardEntry | null>(null);
+
+  const courses = ["Web Development", "Data Analysis", "Mobile Application Development"];
 
   useEffect(() => {
-    const loadData = async () => {
-      setLoading(true);
-      const [submissions, assignments] = await Promise.all([
-        submissionService.getAllSubmissions(),
-        assignmentService.getAllAssignments()
-      ]);
+    loadLeaderboardData();
+  }, [showAllCourses, userCourse]);
 
-      const data = calculateLeaderboard(submissions, assignments);
-      setLeaderboard(data);
-      setLoading(false);
-    };
 
-    loadData();
-  }, []);
 
-  const filtered = showAllCourses
-    ? leaderboard
-    : leaderboard.filter(entry => entry.userCourse === userCourse);
-
-  const currentUserRank = filtered.findIndex(entry => entry.userId === userId) + 1;
-  const currentUserData = filtered.find(entry => entry.userId === userId);
+ const loadLeaderboardData = async () => {
+  setLoading(true);
+  
+  try {
+    if (showAllCourses) {
+      const allCourseData = await Promise.all(
+        courses.map(course => {
+          const courseId = course.replace(/\s+/g, '_');
+          return optimizedLeaderboardService.getTopStudents(courseId, 10)
+        })
+      );
+      
+      // Combine and sort all courses
+      const combined = allCourseData.flat().sort((a, b) => {
+        if (a.averageSeconds !== b.averageSeconds) {
+          return a.averageSeconds - b.averageSeconds;
+        }
+        return b.totalSubmissions - a.totalSubmissions;
+      });
+      
+      setLeaderboard(combined.slice(0, 10));
+      
+      // Find current user in combined list
+      const userIndex = combined.findIndex(entry => entry.userId === userId);
+      if (userIndex !== -1) {
+        setCurrentUserRank(userIndex + 1);
+        setCurrentUserData(combined[userIndex]);
+      } else {
+        // Get user's specific rank from their course
+        const userRankData = await optimizedLeaderboardService.getUserRank(userId, userCourse);
+        setCurrentUserRank(userRankData.rank);
+        setCurrentUserData(userRankData.userData || null);
+      }
+    } else {
+      // Use normalized course ID
+      const courseId = userCourse.replace(/\s+/g, '_');
+      const courseData = await optimizedLeaderboardService.getTopStudents(courseId, 10);
+      setLeaderboard(courseData);
+      
+      // Get current user's rank in their course
+      const userRankData = await optimizedLeaderboardService.getUserRank(userId, courseId);
+      setCurrentUserRank(userRankData.rank);
+      setCurrentUserData(userRankData.userData || null);
+      
+      // If user is not in top 10, add them to the list
+      if (userRankData.rank > 10 && userRankData.userData) {
+        setLeaderboard(prev => [...prev, { ...userRankData.userData!, rank: userRankData.rank }]);
+      }
+    }
+  } catch (error) {
+    console.error("Error loading leaderboard:", error);
+  } finally {
+    setLoading(false);
+  }
+};
 
   const getRankIcon = (rank: number) => {
     switch (rank) {
@@ -91,9 +133,13 @@ const StudentLeaderboard = ({ userId, userCourse, userEmail }: StudentLeaderboar
           </h1>
         </div>
         <p className="text-slate-600 text-sm sm:text-base">See how you stack up against your peers</p>
+        <div className="inline-flex items-center gap-2 px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium">
+          <Zap className="w-3 h-3" />
+          Ultra-fast • {showAllCourses ? '3' : '1'} read{showAllCourses ? 's' : ''} only
+        </div>
       </div>
 
-      {/* Your Rank Card (Mobile-First) */}
+      {/* Your Rank Card */}
       {currentUserData && (
         <Card className="bg-gradient-to-r from-blue-50 to-purple-50 border-2 border-blue-200 shadow-lg">
           <CardContent className="p-4 sm:p-6">
@@ -173,9 +219,9 @@ const StudentLeaderboard = ({ userId, userCourse, userEmail }: StudentLeaderboar
               {/* Mobile Layout */}
               <div className="block sm:hidden">
                 <div className="divide-y divide-slate-100">
-                  {filtered.map((entry, index) => {
+                  {leaderboard.map((entry, index) => {
                     const isYou = entry.userId === userId;
-                    const rank = index + 1;
+                    const rank = entry.rank || index + 1;
                     return (
                       <div
                         key={entry.userId}
@@ -239,9 +285,9 @@ const StudentLeaderboard = ({ userId, userCourse, userEmail }: StudentLeaderboar
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {filtered.map((entry, index) => {
+                    {leaderboard.map((entry, index) => {
                       const isYou = entry.userId === userId;
-                      const rank = index + 1;
+                      const rank = entry.rank || index + 1;
                       return (
                         <tr
                           key={entry.userId}
@@ -299,7 +345,7 @@ const StudentLeaderboard = ({ userId, userCourse, userEmail }: StudentLeaderboar
             </>
           )}
 
-          {filtered.length === 0 && !loading && (
+          {leaderboard.length === 0 && !loading && (
             <div className="text-center py-12">
               <div className="w-16 h-16 mx-auto mb-4 bg-slate-100 rounded-full flex items-center justify-center">
                 <Users className="w-8 h-8 text-slate-400" />
@@ -310,8 +356,14 @@ const StudentLeaderboard = ({ userId, userCourse, userEmail }: StudentLeaderboar
         </CardContent>
       </Card>
 
-      {/* Motivational Footer */}
+      {/* Performance Footer */}
       <div className="text-center space-y-2 p-4">
+        <div className="flex items-center justify-center gap-1">
+          <Target className="w-4 h-4 text-green-500" />
+          <span className="text-sm font-medium text-slate-700">
+            Optimized for performance • {showAllCourses ? '3' : '1'} Firebase read{showAllCourses ? 's' : ''}
+          </span>
+        </div>
         <div className="flex items-center justify-center gap-1">
           <Zap className="w-4 h-4 text-yellow-500" />
           <span className="text-sm font-medium text-slate-700">Keep pushing forward!</span>

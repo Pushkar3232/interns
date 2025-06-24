@@ -1,41 +1,148 @@
 // src/components/AdminLeaderboard.tsx
-import { useEffect, useState } from "react";
-import { calculateLeaderboard } from "@/services/leaderboardService.ts";
-import { submissionService } from "@/services/submissionService";
-import { assignmentService } from "@/services/assignmentService";
+import { useEffect, useState, useCallback } from "react";
+import { leaderboardService, LeaderboardEntry } from "@/services/leaderboardService";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Trophy, Medal, Award, Users, Clock, FileText, Filter, Crown } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Trophy, Medal, Award, Users, Clock, FileText, Filter, Crown, RefreshCw, ChevronDown } from "lucide-react";
+
+interface LeaderboardStats {
+  totalStudents: number;
+  totalSubmissions: number;
+  avgResponseTime: number;
+}
 
 const AdminLeaderboard = () => {
-  const [leaderboard, setLeaderboard] = useState<any[]>([]);
-  const [filtered, setFiltered] = useState<any[]>([]);
+  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
+  const [stats, setStats] = useState<LeaderboardStats>({
+    totalStudents: 0,
+    totalSubmissions: 0,
+    avgResponseTime: 0
+  });
   const [loading, setLoading] = useState(true);
-  const [selectedCourse, setSelectedCourse] = useState("All");
-  const COURSES = ["Web Development", "Data Analysis", "Mobile Application Development"];
+  const [statsLoading, setStatsLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [selectedCourse, setSelectedCourse] = useState("Web Development");
+  const [currentPage, setCurrentPage] = useState(0);
+  const [error, setError] = useState<string | null>(null);
+  const [lastRefresh, setLastRefresh] = useState<number>(Date.now());
+  
+  const ITEMS_PER_PAGE = 10;
+  
+  // ✅ OPTIMIZATION: Remove "All courses" - force specific course selection
+  const COURSES = [
+    "Web Development", 
+    "Data Analysis", 
+    "Mobile Application Development"
+  ];
 
-  useEffect(() => {
-    const load = async () => {
-      setLoading(true);
-      const [submissions, assignments] = await Promise.all([
-        submissionService.getAllSubmissions(),
-        assignmentService.getAllAssignments(),
+  // ✅ OPTIMIZATION: Debounced loading to prevent multiple calls
+  const loadInitialData = useCallback(async () => {
+    if (!selectedCourse) return;
+    
+    setLoading(true);
+    setStatsLoading(true);
+    setCurrentPage(0);
+    setError(null);
+    
+    try {
+      console.log("🚀 Loading initial data for:", selectedCourse);
+      
+      // ✅ OPTIMIZATION: Load data in parallel but with error handling
+      const [leaderboardData, statsData] = await Promise.allSettled([
+        leaderboardService.getTopStudents(selectedCourse, ITEMS_PER_PAGE),
+        leaderboardService.getLeaderboardStats(selectedCourse)
       ]);
-      const lb = calculateLeaderboard(submissions, assignments);
-      setLeaderboard(lb);
+      
+      // Handle leaderboard data
+      if (leaderboardData.status === 'fulfilled') {
+        setLeaderboard(leaderboardData.value);
+        setHasMore(leaderboardData.value.length === ITEMS_PER_PAGE);
+      } else {
+        console.error("Leaderboard load failed:", leaderboardData.reason);
+        setLeaderboard([]);
+        setError("Failed to load leaderboard data");
+      }
+      
+      // Handle stats data
+      if (statsData.status === 'fulfilled') {
+        setStats(statsData.value);
+      } else {
+        console.error("Stats load failed:", statsData.reason);
+        setStats({ totalStudents: 0, totalSubmissions: 0, avgResponseTime: 0 });
+      }
+      
+    } catch (error) {
+      console.error("Error loading initial data:", error);
+      setLeaderboard([]);
+      setStats({ totalStudents: 0, totalSubmissions: 0, avgResponseTime: 0 });
+      setError("Failed to load data. Please try again.");
+    } finally {
       setLoading(false);
-    };
-
-    load();
-  }, []);
-
-  useEffect(() => {
-    if (selectedCourse === "All") {
-      setFiltered(leaderboard);
-    } else {
-      setFiltered(leaderboard.filter(entry => entry.userCourse === selectedCourse));
+      setStatsLoading(false);
+      setLastRefresh(Date.now());
     }
-  }, [selectedCourse, leaderboard]);
+  }, [selectedCourse]);
+
+  // ✅ OPTIMIZATION: Load data when course changes or component mounts
+  useEffect(() => {
+    loadInitialData();
+  }, [loadInitialData]);
+
+  // ✅ OPTIMIZATION: Improved load more with better error handling
+  const loadMoreStudents = async () => {
+    if (!hasMore || loadingMore || !selectedCourse) return;
+    
+    setLoadingMore(true);
+    try {
+      const nextPage = currentPage + 1;
+      const skip = nextPage * ITEMS_PER_PAGE;
+      
+      console.log(`📄 Loading more students: page ${nextPage}, skip ${skip}`);
+      
+      const moreData = await leaderboardService.getMoreStudents(
+        selectedCourse, 
+        skip, 
+        ITEMS_PER_PAGE
+      );
+      
+      if (moreData.length > 0) {
+        setLeaderboard(prev => {
+          // Prevent duplicates
+          const existingIds = new Set(prev.map(item => item.id));
+          const newItems = moreData.filter(item => !existingIds.has(item.id));
+          return [...prev, ...newItems];
+        });
+        setCurrentPage(nextPage);
+        setHasMore(moreData.length === ITEMS_PER_PAGE);
+      } else {
+        setHasMore(false);
+      }
+    } catch (error) {
+      console.error("Error loading more students:", error);
+      setHasMore(false);
+      setError("Failed to load more students");
+    } finally {
+      setLoadingMore(false);
+    }
+  };
+
+  // ✅ OPTIMIZATION: Smart refresh with cache clearing
+  const refreshData = async () => {
+    // Clear cache for this course
+    leaderboardService.clearCache(selectedCourse);
+    await loadInitialData();
+  };
+
+  // ✅ OPTIMIZATION: Course change with preloading
+  const handleCourseChange = async (newCourse: string) => {
+    if (newCourse === selectedCourse) return;
+    
+    setSelectedCourse(newCourse);
+    // Preload data for the new course
+    leaderboardService.preloadData(newCourse);
+  };
 
   const getRankIcon = (rank: number) => {
     switch (rank) {
@@ -63,25 +170,14 @@ const AdminLeaderboard = () => {
     }
   };
 
-  const getRowAnimation = (index: number) => {
-    return {
-      animationDelay: `${index * 0.1}s`,
-    };
-  };
-
-  const getCourseColor = (course: string) => {
-    const colors = {
-      "Web Development": "bg-blue-100 text-blue-800 border-blue-200",
-      "Data Analysis": "bg-green-100 text-green-800 border-green-200",
-      "Mobile Application Development": "bg-purple-100 text-purple-800 border-purple-200",
-    };
-    return colors[course as keyof typeof colors] || "bg-gray-100 text-gray-800 border-gray-200";
-  };
+  const getRowAnimation = (index: number) => ({
+    animationDelay: `${index * 0.1}s`,
+  });
 
   return (
-    <div className="min-h-screen bg-gradient-to-brp-6">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-6">
       <div className="max-w-7xl mx-auto">
-        {/* Header Section */}
+        {/* Header */}
         <div className="mb-8 text-center">
           <div className="flex items-center justify-center gap-3 mb-4">
             <div className="p-3 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full shadow-lg">
@@ -92,25 +188,68 @@ const AdminLeaderboard = () => {
             </h1>
           </div>
           <p className="text-slate-600 text-lg">Track student performance and achievements</p>
+          
+          {/* ✅ Show last refresh time */}
+          <div className="text-xs text-slate-500 mt-2">
+            Last updated: {new Date(lastRefresh).toLocaleTimeString()}
+          </div>
         </div>
+
+        {/* ✅ OPTIMIZATION: Course Selection - No "All courses" option */}
+        <div className="mb-6 flex justify-center">
+          <div className="flex items-center gap-2 bg-white rounded-lg p-2 shadow-md">
+            <Filter className="w-4 h-4 text-slate-600" />
+            <select
+              value={selectedCourse}
+              onChange={(e) => handleCourseChange(e.target.value)}
+              className="px-4 py-2 rounded-lg border border-slate-200 bg-white text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500"
+              disabled={loading}
+            >
+              {COURSES.map((course) => (
+                <option key={course} value={course}>{course}</option>
+              ))}
+            </select>
+            <Button
+              onClick={refreshData}
+              disabled={loading}
+              variant="outline"
+              size="sm"
+              className="ml-2"
+              title="Refresh data and clear cache"
+            >
+              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            </Button>
+          </div>
+        </div>
+
+        {/* ✅ Error display */}
+        {error && (
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-center">
+            {error}
+          </div>
+        )}
 
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-xl hover:shadow-2xl transition-all duration-300">
+          <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-xl">
             <CardContent className="p-6">
               <div className="flex items-center gap-4">
-                <div className="p-3 bg-blue-100 rounded-lg">    
+                <div className="p-3 bg-blue-100 rounded-lg">
                   <Users className="w-6 h-6 text-blue-600" />
                 </div>
                 <div>
-                  <p className="text-sm text-slate-600 font-medium">Total Students</p>
-                  <p className="text-2xl font-bold text-slate-900">{leaderboard.length}</p>
+                  <p className="text-sm text-slate-600 font-medium">Active Students</p>
+                  {statsLoading ? (
+                    <Skeleton className="h-8 w-16" />
+                  ) : (
+                    <p className="text-2xl font-bold text-slate-900">{stats.totalStudents}</p>
+                  )}
                 </div>
               </div>
             </CardContent>
           </Card>
 
-          <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-xl hover:shadow-2xl transition-all duration-300">
+          <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-xl">
             <CardContent className="p-6">
               <div className="flex items-center gap-4">
                 <div className="p-3 bg-green-100 rounded-lg">
@@ -118,15 +257,17 @@ const AdminLeaderboard = () => {
                 </div>
                 <div>
                   <p className="text-sm text-slate-600 font-medium">Total Submissions</p>
-                  <p className="text-2xl font-bold text-slate-900">
-                    {leaderboard.reduce((sum, entry) => sum + entry.totalSubmissions, 0)}
-                  </p>
+                  {statsLoading ? (
+                    <Skeleton className="h-8 w-16" />
+                  ) : (
+                    <p className="text-2xl font-bold text-slate-900">{stats.totalSubmissions}</p>
+                  )}
                 </div>
               </div>
             </CardContent>
           </Card>
 
-          <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-xl hover:shadow-2xl transition-all duration-300">
+          <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-xl">
             <CardContent className="p-6">
               <div className="flex items-center gap-4">
                 <div className="p-3 bg-purple-100 rounded-lg">
@@ -134,137 +275,124 @@ const AdminLeaderboard = () => {
                 </div>
                 <div>
                   <p className="text-sm text-slate-600 font-medium">Avg Response Time</p>
-                  <p className="text-2xl font-bold text-slate-900">
-                    {leaderboard.length > 0 
-                      ? Math.round(leaderboard.reduce((sum, entry) => sum + entry.averageSeconds, 0) / leaderboard.length)
-                      : 0}s
-                  </p>
+                  {statsLoading ? (
+                    <Skeleton className="h-8 w-16" />
+                  ) : (
+                    <p className="text-2xl font-bold text-slate-900">{stats.avgResponseTime}s</p>
+                  )}
                 </div>
               </div>
             </CardContent>
           </Card>
         </div>
 
-        {/* Main Leaderboard Card */}
+        {/* Leaderboard Table */}
         <Card className="shadow-2xl border-0 bg-white/90 backdrop-blur-sm overflow-hidden">
           <CardHeader className="bg-gradient-to-r from-slate-50 to-blue-50 border-b">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-              <CardTitle className="text-2xl text-slate-900 flex items-center gap-2">
-                <Award className="w-6 h-6 text-blue-600" />
-                Rankings
-              </CardTitle>
-              <div className="flex items-center gap-2">
-                <Filter className="w-4 h-4 text-slate-600" />
-                <select
-                  value={selectedCourse}
-                  onChange={(e) => setSelectedCourse(e.target.value)}
-                  className="px-4 py-2 rounded-lg border border-slate-200 bg-white text-sm font-medium focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm hover:shadow-md transition-all duration-200"
-                >
-                  <option value="All">All Courses</option>
-                  {COURSES.map((course) => (
-                    <option key={course} value={course}>{course}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
+            <CardTitle className="text-2xl text-slate-900 flex items-center gap-2">
+              <Award className="w-6 h-6 text-blue-600" /> 
+              Top Performers - {selectedCourse}
+            </CardTitle>
           </CardHeader>
           <CardContent className="p-0">
             {loading ? (
               <div className="p-6 space-y-4">
                 {[...Array(6)].map((_, i) => (
-                  <div key={i} className="flex items-center space-x-4">
-                    <Skeleton className="h-12 w-12 rounded-full" />
-                    <div className="space-y-2 flex-1">
-                      <Skeleton className="h-4 w-1/4" />
-                      <Skeleton className="h-3 w-1/2" />
-                    </div>
-                    <Skeleton className="h-8 w-20" />
-                  </div>
+                  <Skeleton key={i} className="h-12 w-full rounded" />
                 ))}
               </div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full">
-                  <thead className="bg-gradient-to-r from-slate-100 to-slate-200 sticky top-0 z-10">
+                  <thead className="bg-slate-100 sticky top-0 z-10">
                     <tr>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">Rank</th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">Student</th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">Course</th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">Avg Time</th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">Submissions</th>
+                      <th className="px-6 py-4 text-left text-xs font-semibold text-slate-700 uppercase">Rank</th>
+                      <th className="px-6 py-4 text-left text-xs font-semibold text-slate-700 uppercase">Student</th>
+                      <th className="px-6 py-4 text-left text-xs font-semibold text-slate-700 uppercase">College</th>
+                      <th className="px-6 py-4 text-left text-xs font-semibold text-slate-700 uppercase">Avg Time</th>
+                      <th className="px-6 py-4 text-left text-xs font-semibold text-slate-700 uppercase">Submissions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {filtered.map((entry, index) => (
-                      <tr 
-                        key={entry.userId} 
-                        className="bg-white hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50 transition-all duration-300 animate-fade-in-up group cursor-pointer"
-                        style={getRowAnimation(index)}
-                      >
+                    {leaderboard.map((entry, index) => (
+                      <tr key={entry.email} className="bg-white group animate-fade-in-up hover:bg-slate-50" style={getRowAnimation(index)}>
                         <td className="px-6 py-4">
-                          <div className={`inline-flex items-center justify-center w-10 h-10 rounded-full ${getRankBadgeColor(index + 1)} transition-transform duration-200 group-hover:scale-110`}>
+                          <div className={`w-10 h-10 rounded-full flex items-center justify-center ${getRankBadgeColor(index + 1)}`}>
                             {getRankIcon(index + 1)}
                           </div>
                         </td>
                         <td className="px-6 py-4">
-                          <div className="flex items-center space-x-3">
-                            <div className="flex-shrink-0">
-                              <div className="w-10 h-10 bg-gradient-to-br from-blue-400 to-indigo-600 rounded-full flex items-center justify-center text-white font-semibold text-sm shadow-lg">
-                                {entry.userName.charAt(0).toUpperCase()}
-                              </div>
-                            </div>
-                            <div>
-                              <div className="text-sm font-semibold text-slate-900">{entry.userName}</div>
-                              <div className="text-sm text-slate-500">{entry.userEmail}</div>
-                            </div>
-                          </div>
+                          <div className="text-sm font-semibold text-slate-900">{entry.name}</div>
+                          <div className="text-sm text-slate-500">{entry.email}</div>
                         </td>
                         <td className="px-6 py-4">
-                          <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border ${getCourseColor(entry.userCourse)}`}>
-                            {entry.userCourse}
-                          </span>
+                          <span className="text-sm text-slate-700">{entry.college || 'N/A'}</span>
                         </td>
                         <td className="px-6 py-4">
-                          <div className="flex items-center gap-1">
-                            <Clock className="w-4 h-4 text-slate-400" />
-                            <span className="text-sm font-medium text-slate-900">{entry.averageSeconds}s</span>
-                          </div>
+                          <span className="text-sm font-medium text-slate-900">{Math.round(entry.avgMinutes * 60)}s</span>
                         </td>
                         <td className="px-6 py-4">
-                          <div className="flex items-center gap-1">
-                            <FileText className="w-4 h-4 text-slate-400" />
-                            <span className="text-sm font-medium text-slate-900">{entry.totalSubmissions}</span>
-                          </div>
+                          <span className="text-sm font-medium text-slate-900">{entry.count}</span>
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
-                {filtered.length === 0 && (
+                
+                {/* ✅ OPTIMIZATION: Load More Button with better UX */}
+                {hasMore && !loading && (
+                  <div className="p-6 text-center border-t">
+                    <Button 
+                      onClick={loadMoreStudents}
+                      disabled={loadingMore}
+                      variant="outline"
+                      className="w-full sm:w-auto"
+                    >
+                      {loadingMore ? (
+                        <>
+                          <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                          Loading...
+                        </>
+                      ) : (
+                        <>
+                          <ChevronDown className="w-4 h-4 mr-2" />
+                          Load More Students ({ITEMS_PER_PAGE} more)
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                )}
+                
+                {leaderboard.length === 0 && !loading && (
                   <div className="text-center py-12">
-                    <div className="w-16 h-16 mx-auto mb-4 bg-slate-100 rounded-full flex items-center justify-center">
-                      <Users className="w-8 h-8 text-slate-400" />
-                    </div>
-                    <p className="text-slate-500 text-lg">No students found for the selected course</p>
+                    <p className="text-slate-500 text-lg">No students found for {selectedCourse}</p>
+                    <Button 
+                      onClick={refreshData} 
+                      variant="outline" 
+                      className="mt-4"
+                    >
+                      Try Refreshing
+                    </Button>
                   </div>
                 )}
               </div>
             )}
           </CardContent>
         </Card>
+        
+        {/* ✅ Read optimization info */}
+        <div className="mt-6 text-center text-xs text-slate-500">
+          Showing top {Math.min(leaderboard.length, ITEMS_PER_PAGE)} students • 
+          Optimized Firebase reads • Data cached for 5 minutes
+        </div>
       </div>
 
-      <style jsx>{`
+      <style>{`
         @keyframes fade-in-up {
-          from {
-            opacity: 0;
-            transform: translateY(20px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
+          from { opacity: 0; transform: translateY(20px); }
+          to { opacity: 1; transform: translateY(0); }
         }
+
         .animate-fade-in-up {
           animation: fade-in-up 0.6s ease-out forwards;
           opacity: 0;
