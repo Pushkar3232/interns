@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { doc, getDoc, Timestamp } from "firebase/firestore";
-import { db } from "@/lib/firebase";  
+import { db } from "@/lib/firebase";
 import { User } from "firebase/auth";
 import { useFirebaseAuth } from "@/hooks/useFirebaseAuth";
 import { useToast } from "@/hooks/use-toast";
@@ -18,6 +18,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import SubmissionForm from "@/components/SubmissionForm";
 import SubmissionHistory from "@/components/SubmissionHistory";
+import StudentLeaderboard from "@/components/StudentLeaderboard";
 import { Analytics } from "@vercel/analytics/react";
 
 import {
@@ -474,108 +475,160 @@ const StudentDashboard = ({ user }: StudentDashboardProps) => {
           </Card>
         </div>
 
-        {/* Main Submissions Section - Simplified without tabs */}
-        <div className="space-y-6">
-          <Tabs defaultValue="upload" className="space-y-4">
-            <TabsList className="grid grid-cols-2 h-10 bg-white/80 backdrop-blur-md shadow border-0">
-              <TabsTrigger
-                value="upload"
-                className="data-[state=active]:bg-blue-500 data-[state=active]:text-white text-sm font-medium"
-              >
-                📤 Upload
-              </TabsTrigger>
-              <TabsTrigger
-                value="history"
-                className="data-[state=active]:bg-blue-500 data-[state=active]:text-white text-sm font-medium"
-              >
-                📄 History
-              </TabsTrigger>
-            </TabsList>
+        {/* Enhanced Main Tabs */}
+        <Tabs defaultValue="submissions" className="space-y-6">
+          {/* 🔹 Main Tabs: Submissions & Leaderboard */}
+          <TabsList className="grid grid-cols-2 h-12 bg-white/70 backdrop-blur-sm shadow-lg border-0">
+            <TabsTrigger
+              value="submissions"
+              className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-indigo-600 data-[state=active]:text-white font-medium"
+            >
+              📝 Submissions
+            </TabsTrigger>
+            <TabsTrigger
+              value="leaderboard"
+              className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-indigo-600 data-[state=active]:text-white font-medium"
+            >
+              🏅 Leaderboard
+            </TabsTrigger>
+          </TabsList>
 
-            {/* 📤 Upload Tab Content */}
-            <TabsContent value="upload">
-              <Card className="shadow-md bg-white/80 backdrop-blur rounded-xl border-0">
-                <CardHeader>
-                  <div className="flex items-center space-x-3">
-                    <div className="p-2 bg-gradient-to-br from-green-500 to-emerald-600 rounded-lg">
-                      <Upload className="w-6 h-6 text-white" />
-                    </div>
-                    <div>
-                      <CardTitle className="text-lg text-slate-900">Submit</CardTitle>
-                      <CardDescription className="text-slate-600">
-                        Upload your code, docs, or project work
-                      </CardDescription>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  {profile?.course ? (
-                    <SubmissionForm
-                      onSubmit={handleSubmit}
-                      userCourse={profile.course}
-                      userName={profile.name}
-                      userEmail={user.email || ""}
-                      userCollege={profile.college}
-                    />
-                  ) : (
-                    <div className="text-center py-8">
-                      <Clock className="w-12 h-12 text-gray-400 mx-auto mb-4 animate-spin" />
-                      <p className="text-gray-600">Loading course information...</p>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </TabsContent>
+          {/* 📂 Submissions Tab */}
+          <TabsContent value="submissions">
+            <Tabs defaultValue="upload" className="space-y-4">
+              <TabsList className="grid grid-cols-2 h-10 bg-white/80 backdrop-blur-md shadow border-0">
+                <TabsTrigger
+                  value="upload"
+                  className="data-[state=active]:bg-blue-500 data-[state=active]:text-white text-sm font-medium"
+                >
+                  📤 Upload
+                </TabsTrigger>
+                <TabsTrigger
+                  value="history"
+                  className="data-[state=active]:bg-blue-500 data-[state=active]:text-white text-sm font-medium"
+                >
+                  📄 History
+                </TabsTrigger>
+              </TabsList>
 
-            {/* 📄 History Tab Content */}
-            <TabsContent value="history">
-              <Card className="shadow-md bg-white/80 backdrop-blur rounded-xl border-0">
-                <CardHeader>
-                  <div className="flex items-center justify-between">
+              {/* 📤 Upload Tab Content */}
+              <TabsContent value="upload">
+                <Card className="shadow-md bg-white/80 backdrop-blur rounded-xl border-0">
+                  <CardHeader>
                     <div className="flex items-center space-x-3">
-                      <div className="p-2 bg-gradient-to-br from-purple-500 to-violet-600 rounded-lg">
-                        <History className="w-6 h-6 text-white" />
+                      <div className="p-2 bg-gradient-to-br from-green-500 to-emerald-600 rounded-lg">
+                        <Upload className="w-6 h-6 text-white" />
                       </div>
                       <div>
-                        <CardTitle className="text-lg text-slate-900">Submission History</CardTitle>
+                        <CardTitle className="text-lg text-slate-900">Submit Homework</CardTitle>
                         <CardDescription className="text-slate-600">
-                          Review your past uploads ({submissions.length} submissions)
+                          Upload your code, docs, or project work
                         </CardDescription>
                       </div>
                     </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
+                  </CardHeader>
+                  <CardContent>
+                    {profile?.course ? (
+                      <SubmissionForm
+                        onSubmit={handleSubmit}
+                        userCourse={profile.course}
+                        userName={profile.name}
+                        userEmail={user.email || ""}
+                        userCollege={profile.college}
+                      />
+                    ) : (
+                      <div className="text-center py-8">
+                        <Clock className="w-12 h-12 text-gray-400 mx-auto mb-4 animate-spin" />
+                        <p className="text-gray-600">Loading course information...</p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              {/* 📄 History Tab Content */}
+              <TabsContent value="history">
+                <Card className="shadow-md bg-white/80 backdrop-blur rounded-xl border-0">
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-3">
+                        <div className="p-2 bg-gradient-to-br from-purple-500 to-violet-600 rounded-lg">
+                          <History className="w-6 h-6 text-white" />
+                        </div>
+                        <div>
+                          <CardTitle className="text-lg text-slate-900">Submission History</CardTitle>
+                          <CardDescription className="text-slate-600">
+                            Review your past uploads ({submissions.length} submissions)
+                          </CardDescription>
+                        </div>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setSubmissionsFetched(false);
+                          loadSubmissions();
+                        }}
+                        disabled={loadingSubmissions}
+                        className="hover:bg-blue-50 hover:border-blue-200"
+                      >
+                        {loadingSubmissions ? (
+                          <Clock className="w-4 h-4 mr-2 animate-spin" />
+                        ) : (
+                          <RefreshCw className="w-4 h-4 mr-2" />
+                        )}
+                        Refresh
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <SubmissionHistory
+                      submissions={submissions}
+                      loading={loadingSubmissions}
+                      onRefresh={() => {
                         setSubmissionsFetched(false);
                         loadSubmissions();
                       }}
-                      disabled={loadingSubmissions}
-                      className="hover:bg-blue-50 hover:border-blue-200"
-                    >
-                      {loadingSubmissions ? (
-                        <Clock className="w-4 h-4 mr-2 animate-spin" />
-                      ) : (
-                        <RefreshCw className="w-4 h-4 mr-2" />
-                      )}
-                      Refresh
-                    </Button>
+                    />
+                  </CardContent>
+                </Card>
+              </TabsContent>
+            </Tabs>
+          </TabsContent>
+
+          {/* 🏅 Leaderboard Tab */}
+          <TabsContent value="leaderboard">
+            <Card className="shadow-md bg-white/80 backdrop-blur rounded-xl border-0">
+              <CardHeader>
+                <div className="flex items-center space-x-3">
+                  <div className="p-2 bg-gradient-to-br from-indigo-500 to-blue-600 rounded-lg">
+                    <TrendingUp className="w-6 h-6 text-white" />
                   </div>
-                </CardHeader>
-                <CardContent>
-                  <SubmissionHistory
-                    submissions={submissions}
-                    loading={loadingSubmissions}
-                    onRefresh={() => {
-                      setSubmissionsFetched(false);
-                      loadSubmissions();
-                    }}
+                  <div>
+                    <CardTitle className="text-lg text-slate-900">Leaderboard</CardTitle>
+                    <CardDescription className="text-slate-600">
+                      See your rank based on submissions
+                    </CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {profile?.course ? (
+                  <StudentLeaderboard
+                    userId={user.uid}
+                    userCourse={profile.course}
+                    userEmail={user.email}
                   />
-                </CardContent>
-              </Card>
-            </TabsContent>
-          </Tabs>
-        </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <Clock className="w-12 h-12 text-gray-400 mx-auto mb-4 animate-spin" />
+                    <p className="text-gray-600">Loading course information...</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   );

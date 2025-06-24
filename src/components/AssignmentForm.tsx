@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { addDoc, collection, Timestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase"; // adjust if your db is exported elsewhere
 import { useToast } from "@/hooks/use-toast";
+import { assignmentService } from "@/services/assignmentService";
 
 const AssignmentForm = () => {
   const { toast } = useToast();
@@ -26,49 +27,55 @@ const AssignmentForm = () => {
     setFormData(prev => ({ ...prev, [key]: value }));
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
 
-    if (!formData.title || !formData.type || !formData.course) {
-      toast({
-        title: "Missing required fields",
-        description: "Title, type and course are required.",
-        variant: "destructive"
-      });
-      return;
-    }
+// Replace your handleSubmit function in AssignmentForm.tsx with this:
 
-    setLoading(true);
-    try {
-      await addDoc(collection(db, "assignments"), {
-        ...formData,
-        createdAt: Timestamp.now(),
-        deadline: formData.deadline ? Timestamp.fromDate(new Date(formData.deadline)) : null,
-        });
+const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
 
-      toast({
-        title: "Assignment Created",
-        description: "The assignment has been successfully added.",
-      });
+  if (!formData.title || !formData.type || !formData.course) {
+    toast({
+      title: "Missing required fields",
+      description: "Title, type and course are required.",
+      variant: "destructive"
+    });
+    return;
+  }
 
-      setFormData({
-        title: "",
-        description: "",
-        type: "homework",
-        course: "",
-        deadline: "",
-      });
-    } catch (error) {
-      console.error("Error creating assignment:", error);
-      toast({
-        title: "Error",
-        description: "Failed to create assignment.",
-        variant: "destructive"
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
+  setLoading(true);
+  try {
+    // ✅ Use the assignmentService.createAssignment method instead of direct addDoc
+    const assignmentId = await assignmentService.createAssignment({
+      title: formData.title,
+      description: formData.description,
+      type: formData.type,
+      course: formData.course,
+      deadline: formData.deadline ? Timestamp.fromDate(new Date(formData.deadline)) : undefined,
+    });
+
+    toast({
+      title: "Assignment Created",
+      description: `Assignment created with ID: ${assignmentId}`,
+    });
+
+    setFormData({
+      title: "",
+      description: "",
+      type: "homework",
+      course: "",
+      deadline: "",
+    });
+  } catch (error) {
+    console.error("Error creating assignment:", error);
+    toast({
+      title: "Error",
+      description: "Failed to create assignment.",
+      variant: "destructive"
+    });
+  } finally {
+    setLoading(false);
+  }
+};
 
   return (
     <Card className="mb-6 shadow-md">

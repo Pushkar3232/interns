@@ -142,16 +142,27 @@ const AdminDashboard = () => {
 };
 
 
-  const loadSubmissions = async () => {
+  // Replace your loadSubmissions function in AdminDashboard.tsx with this:
+
+const loadSubmissions = async () => {
   if (!courseFilter) return;
 
   setLoading(true);
   try {
-    const all = await getLatestSubmissions(courseFilter);
-    console.log("Got submissions:", all.length);
-    setAllSubmissions(all);
-    setFilteredSubmissions(all);
-    processSubmissionsData(all);
+    // ✅ Load both submissions and assignments
+    const [submissions, allAssignments] = await Promise.all([
+      getLatestSubmissions(courseFilter),
+      assignmentService.getAllAssignments()
+    ]);
+    
+    console.log("Got submissions:", submissions.length);
+    console.log("Got assignments:", allAssignments.length);
+    
+    setAllSubmissions(submissions);
+    setFilteredSubmissions(submissions);
+    setAssignments(allAssignments); // ✅ Update assignments state
+    
+    processSubmissionsData(submissions);
   } catch (error) {
     console.error("Error:", error);
   } finally {
