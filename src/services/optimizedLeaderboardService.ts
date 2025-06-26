@@ -60,10 +60,11 @@ class OptimizedLeaderboardService {
       const topQuery = query(
         leaderboardRef,
         where("totalSubmissions", ">=", 1),
-        orderBy("averageSeconds", "asc"),
-        orderBy("totalSubmissions", "desc"),
+        orderBy("totalSubmissions", "desc"),  // Most submissions first
+        orderBy("averageSeconds", "asc"),     // Then sort by least avg time
         limit(limitCount)
       );
+
 
       const snapshot = await getDocs(topQuery);
       if (snapshot.empty) return [];
