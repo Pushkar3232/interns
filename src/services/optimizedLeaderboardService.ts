@@ -49,38 +49,52 @@ class OptimizedLeaderboardService {
   }
 
   async getTopStudents(course: string, limitCount: number = 10): Promise<LeaderboardEntry[]> {
-    try {
-      const cacheKey = `${course}_top_${limitCount}`;
-      const cached = this.cache.get(cacheKey);
-      if (cached && this.isCacheValid(cached.timestamp)) {
-        return cached.data;
-      }
+  try {
+    const cacheKey = `${course}_top_${limitCount}`;
+    const cached = this.cache.get(cacheKey);
 
-      const leaderboardRef = collection(db, "leaderboards", course, "students");
-      const topQuery = query(
-        leaderboardRef,
-        where("totalSubmissions", ">=", 1),
-        orderBy("totalSubmissions", "desc"),  // Most submissions first
-        orderBy("averageSeconds", "asc"),     // Then sort by least avg time
-        limit(limitCount)
-      );
-
-
-      const snapshot = await getDocs(topQuery);
-      if (snapshot.empty) return [];
-
-      const topStudents = snapshot.docs.map((doc, index) => ({
-        ...doc.data(),
+    if (cached && this.isCacheValid(cached.timestamp)) {
+      // Recalculate rank even if using cached data
+      return cached.data.map((entry, index) => ({
+        ...entry,
         rank: index + 1
-      })) as LeaderboardEntry[];
-
-      this.cache.set(cacheKey, { data: topStudents, timestamp: Date.now() });
-      return topStudents;
-    } catch (error) {
-      console.error("Error in getTopStudents:", error);
-      return [];
+      }));
     }
+
+    const leaderboardRef = collection(db, "leaderboards", course, "students");
+
+    const topQuery = query(
+      leaderboardRef,
+      where("totalSubmissions", ">=", 1),
+      orderBy("totalSubmissions", "desc"),  // Most submissions first
+      orderBy("averageSeconds", "asc"),     // Less avg time preferred on tie
+      limit(limitCount)
+    );
+
+    const snapshot = await getDocs(topQuery);
+    if (snapshot.empty) return [];
+
+    const topStudents = snapshot.docs.map((doc, index) => {
+      const data = doc.data() as LeaderboardEntry;
+      return {
+        ...data,
+        rank: index + 1
+      };
+    });
+
+    // Save to cache without rank (optional, but safer)
+    this.cache.set(cacheKey, {
+      data: topStudents.map(({ rank, ...rest }) => rest),  // strip rank before caching
+      timestamp: Date.now()
+    });
+
+    return topStudents;
+  } catch (error) {
+    console.error("Error in getTopStudents:", error);
+    return [];
   }
+}
+
 
   async getUserRank(userId: string, course: string): Promise<{ rank: number; total: number; userData?: LeaderboardEntry }> {
     try {
