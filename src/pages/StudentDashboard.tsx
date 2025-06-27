@@ -18,7 +18,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import SubmissionForm from "@/components/SubmissionForm";
 import SubmissionHistory from "@/components/SubmissionHistory";
-import StudentLeaderboard from "@/components/StudentLeaderboard";
+// import StudentLeaderboard from "@/components/StudentLeaderboard";
 import { Analytics } from "@vercel/analytics/react";
 
 import {
@@ -485,12 +485,12 @@ const StudentDashboard = ({ user }: StudentDashboardProps) => {
             >
               📝 Submissions
             </TabsTrigger>
-            <TabsTrigger
+            {/* <TabsTrigger
               value="leaderboard"
               className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-indigo-600 data-[state=active]:text-white font-medium"
             >
               🏅 Leaderboard
-            </TabsTrigger>
+            </TabsTrigger> */}
           </TabsList>
 
           {/* 📂 Submissions Tab */}
@@ -596,7 +596,7 @@ const StudentDashboard = ({ user }: StudentDashboardProps) => {
             </Tabs>
           </TabsContent>
 
-          {/* 🏅 Leaderboard Tab */}
+          {/* 🏅 Leaderboard Tab
           <TabsContent value="leaderboard">
             <Card className="shadow-md bg-white/80 backdrop-blur rounded-xl border-0">
               <CardHeader>
@@ -627,8 +627,26 @@ const StudentDashboard = ({ user }: StudentDashboardProps) => {
                 )}
               </CardContent>
             </Card>
-          </TabsContent>
+          </TabsContent> */}
         </Tabs>
+        <a
+  href="https://wa.me/919552556876?text=Hi%20there%2C%20I%20am%20facing%20an%20issue%20with%20the%20application..."
+  target="_blank"
+  rel="noopener noreferrer"
+  className="fixed bottom-6 right-6 z-50 flex items-center gap-3 px-5 py-3 rounded-full bg-green-500 hover:bg-green-600 text-white text-sm md:text-base font-semibold shadow-xl transition-all duration-300 ease-in-out backdrop-blur-sm"
+>
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    className="w-5 h-5 md:w-6 md:h-6"
+    viewBox="0 0 24 24"
+    fill="currentColor"
+  >
+    <path d="M20.52 3.48A11.84 11.84 0 0 0 12 0C5.4 0 0 5.4 0 12a11.9 11.9 0 0 0 1.6 5.88L0 24l6.4-1.68A11.86 11.86 0 0 0 12 24c6.6 0 12-5.4 12-12 0-3.2-1.24-6.2-3.48-8.52zM12 22c-1.9 0-3.74-.52-5.36-1.5l-.4-.24-3.8 1 1-3.64-.24-.4A10 10 0 1 1 22 12c0 5.52-4.48 10-10 10zm5.72-7.72c-.28-.14-1.64-.8-1.89-.9-.25-.1-.43-.14-.61.14s-.7.91-.86 1.1c-.16.18-.31.2-.58.07-1.02-.51-3.17-2.16-3.66-3.66-.08-.23-.01-.4.17-.58.17-.17.4-.45.6-.68.2-.23.27-.4.4-.66.13-.26.07-.49 0-.68-.07-.19-.62-1.47-.86-2.01s-.47-.49-.64-.5h-.55c-.18 0-.47.07-.72.33-.25.26-.95.94-.95 2.3s.98 2.67 1.11 2.85c.14.18 1.93 3.1 4.69 4.34.66.29 1.17.46 1.57.59.66.21 1.26.18 1.75.11.54-.08 1.65-.68 1.9-1.32.23-.61.23-1.12.16-1.23-.08-.11-.28-.19-.56-.33z" />
+  </svg>
+  <span className="hidden sm:inline">Chat on WhatsApp</span>
+</a>
+
+
       </div>
     </div>
   );
