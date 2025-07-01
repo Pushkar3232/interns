@@ -1,7 +1,5 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useState } from "react";
 import { Submission } from "@/services/submissionService";
 
@@ -9,9 +7,17 @@ interface SubmissionHistoryProps {
   submissions: Submission[];
   loading: boolean;
   onRefresh?: () => void;
+  onLoadMore?: () => void;
+  hasMore?: boolean;
 }
 
-const SubmissionHistory = ({ submissions, loading, onRefresh }: SubmissionHistoryProps) => {
+const SubmissionHistory = ({
+  submissions,
+  loading,
+  onRefresh,
+  onLoadMore,
+  hasMore,
+}: SubmissionHistoryProps) => {
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
 
   const toggleExpanded = (id: string) => {
@@ -25,24 +31,24 @@ const SubmissionHistory = ({ submissions, loading, onRefresh }: SubmissionHistor
   };
 
   const formatDate = (date: Date) => {
-    return date.toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
+    return date.toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
     });
   };
 
   const getTypeIcon = (type: string) => {
-    return type === 'classwork' ? '📚' : '🏠';
+    return type === "classwork" ? "📚" : "🏠";
   };
 
   const getTypeColor = (type: string) => {
-    return type === 'classwork' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800';
+    return type === "classwork" ? "bg-blue-100 text-blue-800" : "bg-purple-100 text-purple-800";
   };
 
-  if (loading) {
+  if (loading && submissions.length === 0) {
     return (
       <Card className="bg-white/60 backdrop-blur-sm border-0 shadow-xl">
         <CardHeader>
@@ -59,7 +65,7 @@ const SubmissionHistory = ({ submissions, loading, onRefresh }: SubmissionHistor
     );
   }
 
-  if (submissions.length === 0) {
+  if (submissions.length === 0 && !loading) {
     return (
       <Card className="bg-white/60 backdrop-blur-sm border-0 shadow-xl">
         <CardHeader>
@@ -72,12 +78,10 @@ const SubmissionHistory = ({ submissions, loading, onRefresh }: SubmissionHistor
               <span className="text-4xl">📝</span>
             </div>
             <h3 className="text-xl font-semibold text-gray-900 mb-2">No submissions yet</h3>
-            <p className="text-gray-600 mb-4">Your submitted work will appear here once you start submitting assignments.</p>
-            {onRefresh && (
-              <Button onClick={onRefresh} variant="outline">
-                Refresh
-              </Button>
-            )}
+            <p className="text-gray-600 mb-4">
+              Your submitted work will appear here once you start submitting assignments.
+            </p>
+            
           </div>
         </CardContent>
       </Card>
@@ -91,7 +95,7 @@ const SubmissionHistory = ({ submissions, loading, onRefresh }: SubmissionHistor
           <div>
             <CardTitle className="text-2xl font-bold text-gray-900">Submission History</CardTitle>
             <CardDescription>
-              View all your submitted work ({submissions.length} submissions)
+              View all your submitted work ({submissions.length} shown)
             </CardDescription>
           </div>
           {onRefresh && (
@@ -104,31 +108,39 @@ const SubmissionHistory = ({ submissions, loading, onRefresh }: SubmissionHistor
       <CardContent>
         <div className="space-y-4">
           {submissions.map((submission) => (
-  <div key={submission.id} className="border p-4 rounded shadow-sm bg-white/80">
-    <div className="flex justify-between items-center">
-      <div>
-        <h3 className="font-semibold text-lg text-gray-800">{submission.title}</h3>
-        <p className="text-sm text-gray-600">{submission.description}</p>
-        <p className="text-xs text-gray-400 mt-1">Type: {submission.type}</p>
-        <p className="text-xs text-gray-400">Status: {submission.status}</p>
-      </div>
-      <div>
-        {submission.fileUrl && (
-          <a
-            href={submission.fileUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-block px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
-          >
-            View File
-          </a>
-        )}
-      </div>
-    </div>
-  </div>
-))}
-
+            <div key={submission.id} className="border p-4 rounded shadow-sm bg-white/80">
+              <div className="flex justify-between items-center">
+                <div>
+                  <h3 className="font-semibold text-lg text-gray-800">{submission.title}</h3>
+                  <p className="text-sm text-gray-600">{submission.description}</p>
+                  <p className="text-xs text-gray-400 mt-1">Type: {submission.type}</p>
+                  <p className="text-xs text-gray-400">
+                    Submitted: {submission.createdAt ? formatDate(submission.createdAt) : "Unknown"}
+                  </p>
+                  <p className="text-xs text-gray-400">Status: {submission.status}</p>
+                </div>
+                <div>
+                  {submission.fileUrl && (
+                    <a
+                      href={submission.fileUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-block px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
+                    >
+                      View File
+                    </a>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
+
+        {hasMore && !loading && (
+          <div className="text-center mt-6">
+            <Button onClick={onLoadMore}>Load More</Button>
+          </div>
+        )}
       </CardContent>
     </Card>
   );

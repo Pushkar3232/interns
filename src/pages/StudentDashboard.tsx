@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { doc, getDoc, Timestamp } from "firebase/firestore";
+import { doc, getDoc, Timestamp, enableIndexedDbPersistence } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { User } from "firebase/auth";
 import { useFirebaseAuth } from "@/hooks/useFirebaseAuth";
@@ -7,7 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   getUserSubmissions,
   saveSubmission,
-  hasSubmitted
+  hasSubmitted,
 } from "@/services/submissionService";
 
 import { requestDriveAccessToken, uploadFileToDrive } from "@/services/googleDriveService";
@@ -18,7 +18,6 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import SubmissionForm from "@/components/SubmissionForm";
 import SubmissionHistory from "@/components/SubmissionHistory";
-// import StudentLeaderboard from "@/components/StudentLeaderboard";
 import { Analytics } from "@vercel/analytics/react";
 
 import {
@@ -38,6 +37,11 @@ import {
   RefreshCw,
   AlertCircle,
 } from "lucide-react";
+
+// enable firestore offline caching
+enableIndexedDbPersistence(db).catch((err) => {
+  console.warn("IndexedDB persistence could not be enabled:", err);
+});
 
 interface StudentDashboardProps {
   user: User;
@@ -67,54 +71,73 @@ const StudentDashboard = ({ user }: StudentDashboardProps) => {
   const [profile, setProfile] = useState<any>(null);
   const [profileLoading, setProfileLoading] = useState(true);
   const [profileError, setProfileError] = useState<string | null>(null);
-
+const [lastDoc, setLastDoc] = useState<QueryDocumentSnapshot | null>(null);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [loadingSubmissions, setLoadingSubmissions] = useState(false);
   const [submissionsError, setSubmissionsError] = useState<string | null>(null);
   const [submissionsFetched, setSubmissionsFetched] = useState(false);
 
+  // const [readCount, setReadCount] = useState(0);
+  // const [cacheHits, setCacheHits] = useState(0);
+
+  const [lastVisible, setLastVisible] = useState<Date | null>(null); // for pagination
+const [hasMore, setHasMore] = useState(true); // ✅ ADD THIS LINE
+
   const GOOGLE_CLIENT_ID = "231620518414-0p9kh2bhr3fl7shtitjpvmuerbmo6mvo.apps.googleusercontent.com";
 
-  // Fetch user profile (by scanning known course folders)
   useEffect(() => {
     const fetchUserProfile = async () => {
       if (!user?.uid) return;
-      
+
       setProfileLoading(true);
       setProfileError(null);
-      
+
+      const cached = localStorage.getItem(`profile-${user.uid}`);
+      if (cached) {
+        console.log("✅ loaded profile from localStorage");
+        setProfile(JSON.parse(cached));
+        // setCacheHits((prev) => prev + 1);
+        setProfileLoading(false);
+        return;
+      }
+
       try {
         const courses = [
           "Web Development",
-          "Data Analysis", 
-          "Mobile Application Development"
+          "Data Analysis",
+          "Mobile Application Development",
         ];
 
-        console.log(`🔍 Searching for user ${user.uid} in courses:`, courses);
+        console.log(`🔍 checking courses for user ${user.uid}`, courses);
 
-        for (const course of courses) {
-          try {
-            const docRef = doc(db, "users", course, "students", user.uid);
-            console.log(`🔍 Checking path: ${docRef.path}`);
-            
-            const snap = await getDoc(docRef);
-            if (snap.exists()) {
-              const data = snap.data();
-              console.log(`✅ Found user profile in ${course}:`, data);
-              setProfile({ ...data, course });
-              setProfileLoading(false);
-              return;
-            } else {
-              console.log(`❌ User not found in ${course}`);
-            }
-          } catch (courseError) {
-            console.warn(`⚠️ Error checking course ${course}:`, courseError);
-          }
-        }
+        try {
+  const docRef = doc(db, "users", user.uid);
+  const snap = await getDoc(docRef);
 
-        throw new Error("User profile not found in any course folder");
+  if (!snap.exists()) {
+    throw new Error("Profile not found");
+  }
+
+  const profileData = snap.data();
+  setProfile(profileData);
+  localStorage.setItem(`profile-${user.uid}`, JSON.stringify(profileData));
+} catch (err) {
+  console.error("❌ error loading profile:", err);
+  setProfileError(err instanceof Error ? err.message : "Failed to load profile");
+  toast({
+    title: "Profile Error",
+    description: "Failed to load your profile. Please refresh the page.",
+    variant: "destructive",
+  });
+} finally {
+  setProfileLoading(false);
+}
+
+
+
+        throw new Error("Profile not found in any course folder");
       } catch (err) {
-        console.error("❌ Error loading user profile:", err);
+        console.error("❌ error loading profile:", err);
         setProfileError(err instanceof Error ? err.message : "Failed to load profile");
         toast({
           title: "Profile Error",
@@ -129,57 +152,56 @@ const StudentDashboard = ({ user }: StudentDashboardProps) => {
     fetchUserProfile();
   }, [user?.uid, toast]);
 
-  // Load submissions when profile is available
-  const loadSubmissions = async () => {
-    if (!user?.uid || !profile?.course) {
-      console.log("⚠️ Cannot load submissions - missing user ID or course");
-      return;
+  const PAGE_SIZE = 3;
+
+const loadSubmissions = async (reset = false) => {
+  if (!user?.uid || !profile?.course) return;
+
+  setLoadingSubmissions(true);
+  setSubmissionsError(null);
+
+  try {
+    const { submissions: submissionsFetched, lastDoc: newLastDoc } =
+      await getUserSubmissions(
+        user.uid,
+        profile.course,
+        PAGE_SIZE,
+        reset ? undefined : lastDoc
+      );
+
+    if (reset) {
+      setSubmissions(submissionsFetched);
+    } else {
+      setSubmissions((prev) => [...prev, ...submissionsFetched]);
     }
 
-    setLoadingSubmissions(true);
-    setSubmissionsError(null);
-
-    try {
-      console.log(`🔍 Loading submissions for user ${user.uid} in course ${profile.course}`);
-      
-      const userSubmissions = await getUserSubmissions(user.uid, profile.course);
-      
-      console.log(`✅ Loaded ${userSubmissions.length} submissions`);
-      setSubmissions(userSubmissions);
-      setSubmissionsFetched(true);
-      
-      if (userSubmissions.length > 0) {
-        toast({
-          title: "Submissions Loaded",
-          description: `Found ${userSubmissions.length} submission${userSubmissions.length !== 1 ? 's' : ''}`,
-        });
-      }
-    } catch (err) {
-      console.error("❌ Failed to load submissions:", err);
-      setSubmissionsError(err instanceof Error ? err.message : "Failed to load submissions");
-      toast({
-        title: "Error Loading Submissions",
-        description: "Failed to load your submissions. Please try refreshing.",
-        variant: "destructive",
-      });
-    } finally {
-      setLoadingSubmissions(false);
+    // 🧠 Very important
+    if (submissionsFetched.length < PAGE_SIZE) {
+      setHasMore(false);
+    } else {
+      setHasMore(true);
     }
-  };
 
-  // Auto-load submissions when profile is ready
+    setLastDoc(newLastDoc);
+    setSubmissionsFetched(true);
+  } catch (err) {
+    console.error("❌ Failed to load submissions:", err);
+    setSubmissionsError(err.message || "Failed to load submissions");
+  } finally {
+    setLoadingSubmissions(false);
+  }
+};
+
+
+
   useEffect(() => {
     if (user?.uid && profile?.course && !submissionsFetched && !loadingSubmissions) {
-      console.log("🚀 Auto-loading submissions for:", profile.course);
+      console.log("🚀 auto-loading submissions for", profile.course);
       loadSubmissions();
     }
   }, [user?.uid, profile?.course, submissionsFetched, loadingSubmissions]);
 
-  async function handleSubmit(data: {
-    assignmentId: string;
-    description: string;
-    file: File;
-  }) {
+  async function handleSubmit(data: { assignmentId: string; description: string; file: File }) {
     const { assignmentId, description, file } = data;
 
     if (!file) {
@@ -201,49 +223,35 @@ const StudentDashboard = ({ user }: StudentDashboardProps) => {
     }
 
     try {
-      console.log("🚀 Starting submission process...");
-      
-      // Step 1: Upload the file to Google Drive
+      console.log("🚀 starting submission process");
+
       const token = await requestDriveAccessToken(GOOGLE_CLIENT_ID);
       const fileUrl = await uploadFileToDrive(file, token);
-      console.log("✅ File uploaded to Drive:", fileUrl);
+      console.log("✅ file uploaded to drive:", fileUrl);
 
-      // Step 2: Fetch assignment data using the NEW course-based structure
       const assignmentRef = doc(db, "assignments", profile.course, "items", assignmentId);
       const assignmentSnap = await getDoc(assignmentRef);
-
+      // setReadCount((prev) => prev + 1);
       if (!assignmentSnap.exists()) {
-        console.error("❌ Assignment not found at path:", assignmentRef.path);
         toast({
-          title: "Error",
-          description: "Assignment not found. Please refresh and try again.",
+          title: "Assignment not found",
+          description: "Please refresh and try again",
           variant: "destructive",
         });
         return;
       }
 
       const assignmentData = assignmentSnap.data();
-      console.log("📄 Assignment data:", assignmentData);
-
-      // Handle different timestamp formats
       let assignmentCreatedAt: Timestamp;
       if (assignmentData.createdAt instanceof Timestamp) {
         assignmentCreatedAt = assignmentData.createdAt;
       } else if (assignmentData.createdAt instanceof Date) {
         assignmentCreatedAt = Timestamp.fromDate(assignmentData.createdAt);
       } else {
-        console.warn("⚠️ Assignment createdAt missing, using current timestamp");
         assignmentCreatedAt = Timestamp.now();
       }
 
-      // Step 3: Check if user already submitted
-      const already = await hasSubmitted(
-        user.uid,
-        profile.course,
-        assignmentId,
-        assignmentCreatedAt
-      );
-
+      const already = await hasSubmitted(user.uid, profile.course, assignmentId, assignmentCreatedAt);
       if (already) {
         toast({
           title: "Already Submitted",
@@ -253,7 +261,6 @@ const StudentDashboard = ({ user }: StudentDashboardProps) => {
         return;
       }
 
-      // Step 4: Build submission object
       const submission = {
         assignmentId,
         assignmentCreatedAt,
@@ -268,44 +275,23 @@ const StudentDashboard = ({ user }: StudentDashboardProps) => {
         userName: profile.name || "Unknown User",
       };
 
-      console.log("📦 Submission object:", submission);
-
-      // Step 5: Save the submission
       await saveSubmission(submission);
-
-      toast({ 
-        title: "Success! 🎉", 
-        description: "Your assignment has been submitted successfully." 
+      toast({
+        title: "Success! 🎉",
+        description: "Your assignment has been submitted successfully.",
       });
-      
-      console.log("✅ Submission completed successfully");
-      
-      // Step 6: Refresh submissions list
-      setSubmissionsFetched(false); // Reset the flag to force reload
+
+      // refresh after submit
+      localStorage.removeItem(`submissions-${user.uid}-${profile.course}`);
+      setSubmissionsFetched(false);
       await loadSubmissions();
-      
-    } catch (error) {
-      console.error("❌ Submission error:", error);
-      
-      if (error.message?.includes("permissions")) {
-        toast({
-          title: "Permission Error",
-          description: "Unable to access Google Drive. Please try again.",
-          variant: "destructive",
-        });
-      } else if (error.message?.includes("network")) {
-        toast({
-          title: "Network Error", 
-          description: "Please check your internet connection and try again.",
-          variant: "destructive",
-        });
-      } else {
-        toast({
-          title: "Submission Failed",
-          description: "Something went wrong. Please try again or contact support.",
-          variant: "destructive",
-        });
-      }
+    } catch (error: any) {
+      console.error("❌ submission error", error);
+      toast({
+        title: "Submission Failed",
+        description: error.message || "Something went wrong. Please try again.",
+        variant: "destructive",
+      });
     }
   }
 
@@ -413,7 +399,7 @@ const StudentDashboard = ({ user }: StudentDashboardProps) => {
         </Card>
 
         {/* Enhanced Stats Section */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        {/* <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <Card className="group hover:scale-105 transition-all duration-300 border-0 bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-lg hover:shadow-xl">
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
@@ -473,7 +459,7 @@ const StudentDashboard = ({ user }: StudentDashboardProps) => {
               </div>
             </CardContent>
           </Card>
-        </div>
+        </div> */}
 
         {/* Enhanced Main Tabs */}
         <Tabs defaultValue="submissions" className="space-y-6">
@@ -562,34 +548,26 @@ const StudentDashboard = ({ user }: StudentDashboardProps) => {
                           </CardDescription>
                         </div>
                       </div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          setSubmissionsFetched(false);
-                          loadSubmissions();
-                        }}
-                        disabled={loadingSubmissions}
-                        className="hover:bg-blue-50 hover:border-blue-200"
-                      >
-                        {loadingSubmissions ? (
-                          <Clock className="w-4 h-4 mr-2 animate-spin" />
-                        ) : (
-                          <RefreshCw className="w-4 h-4 mr-2" />
-                        )}
-                        Refresh
-                      </Button>
+                      
                     </div>
                   </CardHeader>
                   <CardContent>
                     <SubmissionHistory
-                      submissions={submissions}
-                      loading={loadingSubmissions}
-                      onRefresh={() => {
-                        setSubmissionsFetched(false);
-                        loadSubmissions();
-                      }}
-                    />
+  submissions={submissions}
+  loading={loadingSubmissions}
+  hasMore={hasMore}
+  onLoadMore={() => loadSubmissions(false)}
+  onRefresh={() => {
+  setSubmissions([]);
+  setLastDoc(null);
+  setHasMore(true);
+  setSubmissionsFetched(false);
+  loadSubmissions(true);
+}}
+
+/>
+
+
                   </CardContent>
                 </Card>
               </TabsContent>

@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
-import { submissionService, Submission,getLatestSubmissions } from "@/services/submissionService";
+import { getAdminSubmissions, getLatestSubmissions, Submission } from "@/services/submissionService";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { COLLEGES } from "@/constants/colleges";
 import AssignmentForm from "@/components/AssignmentForm";
 import { assignmentService } from "@/services/assignmentService";
-
+import MigrateSubmissionsButton from "@/components/MigrateSubmissionsButton";
 
 import AdminLeaderboard from "@/components/AdminLeaderboard";
 import * as XLSX from 'xlsx';
@@ -55,8 +55,10 @@ const AdminDashboard = () => {
   const [collegeFilter, setCollegeFilter] = useState("");
   const [courseFilter, setCourseFilter] = useState("Web Development"); // default
   const [typeFilter, setTypeFilter] = useState("");
+  const [filterDate, setFilterDate] = useState<Date | null>(new Date());
+  const [viewMode, setViewMode] = useState<"today" | "all" | "custom">("today");
   const [searchQuery, setSearchQuery] = useState("");
-  const [dateRange, setDateRange] = useState({ start: "", end: "" });
+  // const [dateRange, setDateRange] = useState({ start: "", end: "" });
 
   // View state
   const [activeTab, setActiveTab] = useState<"daily" | "overview" | "assignments" | "leaderboard">("assignments");
@@ -145,30 +147,32 @@ const AdminDashboard = () => {
   // Replace your loadSubmissions function in AdminDashboard.tsx with this:
 
 const loadSubmissions = async () => {
-  if (!courseFilter) return;
-
   setLoading(true);
   try {
-    // ✅ Load both submissions and assignments
-    const [submissions, allAssignments] = await Promise.all([
-      getLatestSubmissions(courseFilter),
-      assignmentService.getAllAssignments()
-    ]);
-    
-    console.log("Got submissions:", submissions.length);
-    console.log("Got assignments:", allAssignments.length);
-    
-    setAllSubmissions(submissions);
-    setFilteredSubmissions(submissions);
-    setAssignments(allAssignments); // ✅ Update assignments state
-    
-    processSubmissionsData(submissions);
-  } catch (error) {
-    console.error("Error:", error);
+    let dateToUse: Date | undefined;
+
+    if (viewMode === "today") {
+      dateToUse = new Date(); // today
+    } else if (viewMode === "custom" && filterDate instanceof Date && !isNaN(filterDate.getTime())) {
+      dateToUse = filterDate;
+    } else {
+      dateToUse = undefined; // "all"
+    }
+
+    const data = await getAdminSubmissions(dateToUse);
+    setAllSubmissions(data);
+  } catch (err) {
+    console.error("Error loading submissions:", err);
   } finally {
     setLoading(false);
   }
 };
+
+
+useEffect(() => {
+  loadSubmissions();
+}, [viewMode, filterDate]);
+
 
 
   useEffect(() => {
@@ -199,21 +203,11 @@ const loadSubmissions = async () => {
         sub.title?.toLowerCase().includes(query)
       );
     }
-    if (dateRange.start && dateRange.end) {
-      const startDate = new Date(dateRange.start);
-      const endDate = new Date(dateRange.end);
-      filtered = filtered.filter(sub => {
-        if (sub.createdAt?.seconds) {
-          const subDate = new Date(sub.createdAt.seconds * 1000);
-          return subDate >= startDate && subDate <= endDate;
-        }
-        return false;
-      });
-    }
+
 
     setFilteredSubmissions(filtered);
     processSubmissionsData(filtered);
-  }, [collegeFilter, courseFilter, typeFilter, searchQuery, dateRange, allSubmissions]);
+  }, [collegeFilter, courseFilter, typeFilter, searchQuery, allSubmissions]);
 
   const toggleDayExpansion = (date: string) => {
     const newExpanded = new Set(expandedDays);
@@ -654,6 +648,36 @@ const createSummarySheet = (
             </CardTitle>
           </CardHeader>
           <CardContent>
+            <div className="flex flex-wrap gap-2 items-center mb-4">
+  <Button
+    variant={viewMode === "today" ? "default" : "outline"}
+    onClick={() => setViewMode("today")}
+  >
+    📅 Today
+  </Button>
+  <Button
+    variant={viewMode === "all" ? "default" : "outline"}
+    onClick={() => setViewMode("all")}
+  >
+    📚 All
+  </Button>
+  <Button
+    variant={viewMode === "custom" ? "default" : "outline"}
+    onClick={() => setViewMode("custom")}
+  >
+    📆 Pick Date
+  </Button>
+
+  {viewMode === "custom" && (
+    <Input
+      type="date"
+      value={filterDate?.toISOString().split("T")[0]}
+      onChange={(e) => setFilterDate(new Date(e.target.value))}
+      className="ml-2"
+    />
+  )}
+</div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
               <div className="relative">
                 <Search className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
@@ -699,7 +723,7 @@ const createSummarySheet = (
               </select>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
                 <Input
@@ -716,9 +740,9 @@ const createSummarySheet = (
                   onChange={e => setDateRange(prev => ({ ...prev, end: e.target.value }))}
                 />
               </div>
-            </div>
+            </div> */}
 
-            {(collegeFilter || courseFilter || typeFilter || searchQuery || dateRange.start || dateRange.end) && (
+            {(collegeFilter || courseFilter || typeFilter || searchQuery) && (
               <div className="mt-4 pt-4 border-t">
                 <div className="flex flex-wrap gap-2">
                   {collegeFilter && (
@@ -753,7 +777,7 @@ const createSummarySheet = (
                       setCourseFilter('');
                       setTypeFilter('');
                       setSearchQuery('');
-                      setDateRange({ start: '', end: '' });
+                      
                     }}
                   >
                     Clear All

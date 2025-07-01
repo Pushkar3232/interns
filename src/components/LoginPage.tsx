@@ -15,25 +15,35 @@ const LoginPage = () => {
 
       if (!user?.uid) throw new Error("Missing UID");
 
-      // 🔍 Search user in the new structure: /users/{course}/students/{uid}
-      const courses = ["Web Development", "Data Analysis", "Mobile Application Development"];
-      let found = false;
+
       let profileData: any = null;
 
-      for (const course of courses) {
-        const ref = doc(db, "users", course, "students", user.uid);
-        const snap = await getDoc(ref);
-        if (snap.exists()) {
-          found = true;
-          profileData = snap.data();
-          console.log(`✅ Found user in ${course}:`, profileData);
-          break;
-        }
-      }
+      const ref = doc(db, "users", user.uid);
+const snap = await getDoc(ref);
+if (snap.exists()) {
+  profileData = snap.data();
+  console.log(`✅ Found user:`, profileData);
+} else {
+  console.log("🔁 Profile incomplete or not found, redirecting to complete-profile");
+  window.location.href = "/complete-profile";
+  return;
+}
+
+if (
+  profileData?.name &&
+  profileData?.college &&
+  profileData?.course
+) {
+  console.log("✅ Profile complete, redirecting to dashboard");
+  window.location.href = "/dashboard";
+} else {
+  console.log("🔁 Profile incomplete, redirecting to complete-profile");
+  window.location.href = "/complete-profile";
+}
+
 
       // Check if profile is complete
       if (
-        found &&
         profileData?.name &&
         profileData?.college &&
         profileData?.course
