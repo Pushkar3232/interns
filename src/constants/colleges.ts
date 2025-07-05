@@ -40,5 +40,8 @@ export const COLLEGES = [
   "Devi Mahalaxmi Polytechnic",
   "Dilkap College",
   "Dr RN Lahoti Polytechnic",
+  "Nashik institute technology",
+  "Government polytechnic Gondia",
+  "Trimurti Institute of Technical education",
   "DY Patil Ambi, Pune",
 ].sort(); 
