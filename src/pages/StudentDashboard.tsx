@@ -202,122 +202,98 @@ const loadSubmissions = async (reset = false) => {
   }, [user?.uid, profile?.course, submissionsFetched, loadingSubmissions]);
 
   async function handleSubmit(data: { assignmentId: string; description: string; file: File }) {
-  const { assignmentId, description, file } = data;
+    const { assignmentId, description, file } = data;
 
-  if (!file) {
-    toast({
-      title: "No file",
-      description: "Please upload a file",
-      variant: "destructive",
-    });
-    return;
-  }
-
-  if (!profile?.course) {
-    toast({
-      title: "Error",
-      description: "Course information not found",
-      variant: "destructive",
-    });
-    return;
-  }
-
-  try {
-    console.log("🚀 starting submission process");
-
-    const token = await requestDriveAccessToken(GOOGLE_CLIENT_ID);
-    const fileUrl = await uploadFileToDrive(file, token); // Drive upload step
-    console.log("✅ file uploaded to drive:", fileUrl);
-
-    const assignmentRef = doc(db, "assignments", profile.course, "items", assignmentId);
-    const assignmentSnap = await getDoc(assignmentRef);
-
-    if (!assignmentSnap.exists()) {
+    if (!file) {
       toast({
-        title: "Assignment not found",
-        description: "Please refresh and try again",
+        title: "No file",
+        description: "Please upload a file",
         variant: "destructive",
       });
       return;
     }
 
-    const assignmentData = assignmentSnap.data();
-    let assignmentCreatedAt: Timestamp;
-    if (assignmentData.createdAt instanceof Timestamp) {
-      assignmentCreatedAt = assignmentData.createdAt;
-    } else if (assignmentData.createdAt instanceof Date) {
-      assignmentCreatedAt = Timestamp.fromDate(assignmentData.createdAt);
-    } else {
-      assignmentCreatedAt = Timestamp.now();
-    }
-
-    const already = await hasSubmitted(user.uid, profile.course, assignmentId, assignmentCreatedAt);
-    if (already) {
+    if (!profile?.course) {
       toast({
-        title: "Already Submitted",
-        description: "You've already submitted this assignment.",
+        title: "Error",
+        description: "Course information not found",
         variant: "destructive",
       });
       return;
     }
 
-    const submission = {
-      assignmentId,
-      assignmentCreatedAt,
-      title: assignmentData.title || "Untitled Assignment",
-      type: assignmentData.type || "Unknown",
-      description: description || "",
-      fileUrl,
-      userCollege: profile.college || "Unknown College",
-      userCourse: profile.course,
-      userEmail: user.email!,
-      userId: user.uid,
-      userName: profile.name || "Unknown User",
-    };
+    try {
+      console.log("🚀 starting submission process");
 
-    await saveSubmission(submission);
-    toast({
-      title: "Success! 🎉",
-      description: "Your assignment has been submitted successfully.",
-    });
+      const token = await requestDriveAccessToken(GOOGLE_CLIENT_ID);
+      const fileUrl = await uploadFileToDrive(file, token);
+      console.log("✅ file uploaded to drive:", fileUrl);
 
-    // refresh after submit
-    localStorage.removeItem(`submissions-${user.uid}-${profile.course}`);
-    setSubmissionsFetched(false);
-    await loadSubmissions();
-  } catch (error: any) {
-    console.error("❌ submission error", error);
+      const assignmentRef = doc(db, "assignments", profile.course, "items", assignmentId);
+      const assignmentSnap = await getDoc(assignmentRef);
+      // setReadCount((prev) => prev + 1);
+      if (!assignmentSnap.exists()) {
+        toast({
+          title: "Assignment not found",
+          description: "Please refresh and try again",
+          variant: "destructive",
+        });
+        return;
+      }
 
-    toast({
-      title: "Submission Failed",
-      description: error.message || "Something went wrong. Please try again.",
-      variant: "destructive",
-    });
+      const assignmentData = assignmentSnap.data();
+      let assignmentCreatedAt: Timestamp;
+      if (assignmentData.createdAt instanceof Timestamp) {
+        assignmentCreatedAt = assignmentData.createdAt;
+      } else if (assignmentData.createdAt instanceof Date) {
+        assignmentCreatedAt = Timestamp.fromDate(assignmentData.createdAt);
+      } else {
+        assignmentCreatedAt = Timestamp.now();
+      }
 
-    // 📩 Send error to your WhatsApp
-    const phoneNumber = "919552556876"; // replace with your WhatsApp number
+      const already = await hasSubmitted(user.uid, profile.course, assignmentId, assignmentCreatedAt);
+      if (already) {
+        toast({
+          title: "Already Submitted",
+          description: "You've already submitted this assignment.",
+          variant: "destructive",
+        });
+        return;
+      }
 
-    const studentName = profile?.name || "Unknown";
-    const collegeName = profile?.college || "Unknown";
-    const assignmentIdText = data.assignmentId || "Unknown";
-    const fileName = data.file?.name || "No file";
-    const userAgent = navigator.userAgent;
+      const submission = {
+        assignmentId,
+        assignmentCreatedAt,
+        title: assignmentData.title || "Untitled Assignment",
+        type: assignmentData.type || "Unknown",
+        description: description || "",
+        fileUrl,
+        userCollege: profile.college || "Unknown College",
+        userCourse: profile.course,
+        userEmail: user.email!,
+        userId: user.uid,
+        userName: profile.name || "Unknown User",
+      };
 
-    const message = encodeURIComponent(
-      `🚨 *Drive Upload Error Report* 🚨\n` +
-      `👤 *Student:* ${studentName}\n` +
-      `🏫 *College:* ${collegeName}\n` +
-      `📄 *Assignment ID:* ${assignmentIdText}\n` +
-      `🗂️ *File:* ${fileName}\n\n` +
-      `📱 *Device Info:*\n${userAgent}\n\n` +
-      `❌ *Error:*\n${error?.message || error.toString()}`
-    );
+      await saveSubmission(submission);
+      toast({
+        title: "Success! 🎉",
+        description: "Your assignment has been submitted successfully.",
+      });
 
-    // Open WhatsApp with prefilled message
-    window.open(`https://wa.me/${phoneNumber}?text=${message}`, "_blank");
+      // refresh after submit
+      localStorage.removeItem(`submissions-${user.uid}-${profile.course}`);
+      setSubmissionsFetched(false);
+      await loadSubmissions();
+    } catch (error: any) {
+      console.error("❌ submission error", error);
+      toast({
+        title: "Submission Failed",
+        description: error.message || "Something went wrong. Please try again.",
+        variant: "destructive",
+      });
+    }
   }
-}
-
 
   const completedSubmissions = submissions.filter((s) => s.status === "submitted").length;
   const pendingSubmissions = submissions.filter((s) => s.status === "pending").length;
