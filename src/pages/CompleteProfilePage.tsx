@@ -30,7 +30,7 @@ export default function CompleteProfilePage() {
     setLoading(true);
     try {
       // Store user in the new structure: users/{course}/students/{uid}
-      await setDoc(doc(db, "users", course, "students", user.uid), {
+      await setDoc(doc(db, "users", user.uid), {
         name,
         college,
         course,
